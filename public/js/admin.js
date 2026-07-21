@@ -75,10 +75,21 @@
   document.getElementById('btn-back-run').addEventListener('click', () => switchTab('run'));
   document.getElementById('btn-refresh-stats').addEventListener('click', () => loadStats());
 
+  function resolveJoinUrl(cfg) {
+    const configured = (cfg.configuredUrl || cfg.publicUrl || '').replace(/\/$/, '');
+    const looksLocal = !configured || /localhost|127\.0\.0\.1/.test(configured);
+    // If PUBLIC_URL is still localhost, use whatever host you opened admin on
+    // (your Mac's Wi‑Fi IP, or the live Render URL).
+    if (looksLocal) return window.location.origin;
+    return configured;
+  }
+
   async function setup() {
     const cfg = await fetch('/api/config').then((r) => r.json());
-    document.getElementById('join-url').textContent = cfg.publicUrl + '/';
-    document.getElementById('qr').src = '/api/qr?size=400';
+    const joinUrl = resolveJoinUrl(cfg).replace(/\/$/, '') + '/';
+    document.getElementById('join-url').textContent = joinUrl;
+    document.getElementById('qr').src =
+      `/api/qr?size=400&url=${encodeURIComponent(joinUrl)}`;
 
     socket = io();
     socket.emit('host:auth', { passcode }, (res) => {

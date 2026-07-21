@@ -22,6 +22,21 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST_PASSCODE = process.env.HOST_PASSCODE || 'ethics2026';
 const PUBLIC_URL = (process.env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 
+function isLocalUrl(url) {
+  return /localhost|127\.0\.0\.1/.test(url || '');
+}
+
+/** Prefer a real PUBLIC_URL; otherwise use the Host the browser hit (LAN IP / Render). */
+function resolvePublicUrl(req) {
+  if (PUBLIC_URL && !isLocalUrl(PUBLIC_URL)) {
+    return PUBLIC_URL;
+  }
+  const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'http').toString().split(',')[0].trim();
+  const host = (req.headers['x-forwarded-host'] || req.headers.host || '').toString().split(',')[0].trim();
+  if (host) return `${proto}://${host}`.replace(/\/$/, '');
+  return PUBLIC_URL;
+}
+
 const questionsPath = process.env.QUESTIONS_PATH
   ? path.resolve(process.env.QUESTIONS_PATH)
   : path.join(__dirname, '..', 'questions.json');
@@ -153,16 +168,23 @@ app.get('/terms', (_req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'terms.html'));
 });
 
-app.get('/api/config', (_req, res) => {
+app.get('/api/config', (req, res) => {
   res.json({
-    publicUrl: PUBLIC_URL,
+    publicUrl: resolvePublicUrl(req),
+    configuredUrl: PUBLIC_URL,
     questionCount: questions.length,
   });
 });
 
 app.get('/api/qr', async (req, res) => {
   try {
-    const url = `${PUBLIC_URL}/`;
+    let url = typeof req.query.url === 'string' ? req.query.url.trim() : '';
+    if (!url) {
+      url = `${resolvePublicUrl(req)}/`;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ error: 'Invalid url' });
+    }
     const png = await QRCode.toBuffer(url, {
       type: 'png',
       width: Number(req.query.size) || 360,
