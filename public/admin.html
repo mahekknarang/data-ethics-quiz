@@ -90,11 +90,16 @@
         <footer class="host-footer">
           <div class="controls">
             <button type="button" class="primary" id="btn-start">Start Quiz</button>
-            <button type="button" id="btn-next" disabled>Next Question</button>
+            <button type="button" id="btn-next" disabled title="Optional — quiz auto-advances">
+              Skip ahead
+            </button>
             <button type="button" id="btn-end" disabled>End Quiz</button>
             <button type="button" class="danger" id="btn-reset">Reset Session</button>
             <button type="button" class="primary" id="btn-goto-reveal">Show data reveal →</button>
           </div>
+          <p class="join-url mono" id="pace-hint" style="text-align: left; font-size: 0.8rem; color: #8b93a0">
+            Auto-paced: ~22s per question · ~17s between · you only tap Start
+          </p>
         </footer>
       </div>
 

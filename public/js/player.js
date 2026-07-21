@@ -14,16 +14,19 @@
   let playerId = null;
   let totalQuestions = 10;
   let questionIndex = -1;
-  let durationMs = 18000;
+  let durationMs = 22000;
+  let betweenDurationMs = 17000;
   let startedAt = null;
   let timerRaf = null;
   let answered = false;
   let score = 0;
   let lowNudgeShown = false;
+  let betweenTick = null;
 
   const CIRC = 2 * Math.PI * 22;
+  const WIN_EMOJIS = ['🎉', '🎊', '✨', '🥳', '👏', '🔥', '💯', '🌟', '🎈', '💖'];
+  const LOSE_EMOJIS = ['❌', '💀', '😵', '😭', '👎', '😬', '🚫', '💔', '🥀', '😮‍💨'];
 
-  // Randomize join copy on load
   document.getElementById('join-headline').textContent = pickCopy('join_headline');
   document.getElementById('join-sub').textContent = pickCopy('join_subtext_name');
   document.getElementById('join-btn').textContent = pickCopy('join_button');
@@ -73,6 +76,11 @@
     timerRaf = null;
   }
 
+  function clearBetweenTick() {
+    if (betweenTick) clearInterval(betweenTick);
+    betweenTick = null;
+  }
+
   function startTimer() {
     stopTimer();
     lowNudgeShown = false;
@@ -102,23 +110,47 @@
     tick();
   }
 
-  function burstConfetti() {
+  function rainEmojis(emojis, count = 42) {
     const root = document.getElementById('confetti');
     root.classList.remove('hidden');
     root.innerHTML = '';
-    const colors = ['#3654FF', '#22c55e', '#FF5B39', '#4FD1C5', '#fbbf24'];
-    for (let i = 0; i < 28; i++) {
-      const bit = document.createElement('i');
-      bit.style.left = Math.random() * 100 + '%';
-      bit.style.top = 20 + Math.random() * 20 + '%';
-      bit.style.background = colors[i % colors.length];
-      bit.style.animationDelay = Math.random() * 120 + 'ms';
-      root.appendChild(bit);
+    for (let i = 0; i < count; i++) {
+      const span = document.createElement('span');
+      span.className = 'emoji-fall';
+      span.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+      span.style.left = Math.random() * 100 + '%';
+      span.style.animationDuration = 1.4 + Math.random() * 1.6 + 's';
+      span.style.animationDelay = Math.random() * 0.45 + 's';
+      span.style.fontSize = 1.2 + Math.random() * 1.4 + 'rem';
+      root.appendChild(span);
     }
     setTimeout(() => {
       root.classList.add('hidden');
       root.innerHTML = '';
-    }, 800);
+    }, 3200);
+  }
+
+  function showFeedback({ correct, timedOut, points }) {
+    const card = document.getElementById('feedback-card');
+    card.classList.remove('ok', 'bad');
+    if (timedOut) {
+      card.classList.add('bad');
+      document.getElementById('feedback-line').textContent = pickCopy('time_up');
+      document.getElementById('feedback-score').textContent = `${score} pts`;
+      rainEmojis(LOSE_EMOJIS, 36);
+    } else if (correct) {
+      card.classList.add('ok');
+      document.getElementById('feedback-line').textContent = pickCopy('answer_correct');
+      document.getElementById('feedback-score').textContent =
+        points != null ? `+${points} · ${score} pts` : `${score} pts`;
+      rainEmojis(WIN_EMOJIS, 48);
+    } else {
+      card.classList.add('bad');
+      document.getElementById('feedback-line').textContent = pickCopy('answer_wrong');
+      document.getElementById('feedback-score').textContent = `${score} pts`;
+      rainEmojis(LOSE_EMOJIS, 40);
+    }
+    showScreen('feedback');
   }
 
   document.getElementById('join-form').addEventListener('submit', (e) => {
@@ -171,9 +203,11 @@
 
   socket.on('quiz:question', (payload) => {
     answered = false;
+    clearBetweenTick();
     questionIndex = payload.questionIndex;
     totalQuestions = payload.totalQuestions;
-    durationMs = payload.durationMs;
+    durationMs = payload.durationMs || 22000;
+    betweenDurationMs = payload.betweenDurationMs || betweenDurationMs;
     startedAt = payload.startedAt;
     renderDots('dots-q');
     renderDots('dots-fb');
@@ -218,7 +252,10 @@
         answer_time_ms: answerTimeMs,
       },
       (res) => {
-        if (!res?.ok) return;
+        if (!res?.ok) {
+          answered = false;
+          return;
+        }
         score = res.score;
         document.getElementById('score-pill').textContent = `${score} pts`;
 
@@ -227,34 +264,52 @@
           else if (i === answerIndex && !res.correct) b.classList.add('reveal-wrong');
         });
 
-        const card = document.getElementById('feedback-card');
-        card.classList.remove('ok', 'bad');
-        card.classList.add(res.correct ? 'ok' : 'bad');
-        document.getElementById('feedback-line').textContent = res.correct
-          ? pickCopy('answer_correct')
-          : pickCopy('answer_wrong');
-        document.getElementById('feedback-score').textContent = res.correct
-          ? `+${res.points} · ${score} pts`
-          : `${score} pts`;
-
         if (res.correct && res.streak >= 2) {
           document.getElementById('score-pill').classList.add('streak');
-          burstConfetti();
           setTimeout(
             () => document.getElementById('score-pill').classList.remove('streak'),
             600
           );
         }
 
-        setTimeout(() => showScreen('feedback'), 450);
+        setTimeout(() => {
+          showFeedback({ correct: res.correct, timedOut: false, points: res.points });
+        }, 350);
       }
     );
   }
 
+  socket.on('quiz:timeout', (payload) => {
+    if (payload.questionIndex !== questionIndex) return;
+    stopTimer();
+    if (answered) return;
+
+    answered = true;
+    document.querySelectorAll('.answer-btn').forEach((b, i) => {
+      b.disabled = true;
+      if (typeof payload.correctIndex === 'number' && i === payload.correctIndex) {
+        b.classList.add('reveal-correct');
+      }
+    });
+    showFeedback({ correct: false, timedOut: true });
+  });
+
   socket.on('quiz:between', (payload) => {
+    clearBetweenTick();
     document.getElementById('between-title').textContent = pickCopy('between_questions');
     document.getElementById('lb-title').textContent = pickCopy('leaderboard');
     formatLb(payload.leaderboard, 'between-lb');
+
+    const dwell = payload.durationMs || betweenDurationMs;
+    const endsAt = Date.now() + dwell;
+    const timerEl = document.getElementById('between-timer');
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+      timerEl.textContent = left > 0 ? `next question in ${left}s` : 'loading…';
+    };
+    tick();
+    betweenTick = setInterval(tick, 250);
+
     showScreen('between');
   });
 
@@ -266,6 +321,7 @@
 
   socket.on('quiz:ended', (payload) => {
     stopTimer();
+    clearBetweenTick();
     document.getElementById('end-title').textContent = pickCopy('end_screen');
     document.getElementById('end-score').textContent = String(payload.score ?? score);
     document.getElementById('end-rank').textContent =

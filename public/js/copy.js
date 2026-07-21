@@ -56,6 +56,13 @@ const COPY = {
     'bold guess, wrong guess 🎲',
   ],
 
+  time_up: [
+    'time\'s up — no answer locked in ⏰',
+    'clock said no. moving on ⌛',
+    'too slow bestie — time up 🐢',
+    'silence is also data... time up 📵',
+  ],
+
   timer_low: [
     "clock's ticking bestie ⏳",
     "decide like your data's on the line (it is) 🔥",

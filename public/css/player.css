@@ -433,11 +433,40 @@ body.player.quiz-mode {
   animation: confetti 700ms var(--ease) forwards;
 }
 
+.confetti-burst .emoji-fall {
+  position: absolute;
+  top: -10vh;
+  font-size: clamp(1.4rem, 5vw, 2.2rem);
+  line-height: 1;
+  animation-name: emojiFall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  will-change: transform, opacity;
+}
+
 @keyframes confetti {
   to {
     transform: translateY(40vh) rotate(240deg);
     opacity: 0;
   }
+}
+
+@keyframes emojiFall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(115vh) rotate(720deg);
+    opacity: 0.85;
+  }
+}
+
+.between-timer {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0;
 }
 
 @media (max-width: 380px) {

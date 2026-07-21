@@ -16,6 +16,7 @@ const {
   scoreboard,
   answeredCount,
   playerCount,
+  clearQuizTimers,
 } = require('./quiz-state');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -84,6 +85,7 @@ function hostSnapshot() {
       : null,
     answered: answeredCount(state),
     durationMs: state.questionDurationMs,
+    betweenDurationMs: state.betweenDurationMs,
     startedAt: state.questionStartedAt,
     leaderboard: scoreboard(state).slice(0, 10),
     players: [...state.players.values()].map((p) => ({
@@ -418,33 +420,24 @@ io.on('connection', (socket) => {
       if (typeof ack === 'function') ack({ ok: false, error: 'Unauthorized' });
       return;
     }
-    if (state.phase !== 'lobby' && state.phase !== 'between') {
-      // allow restart from lobby only via reset
+    if (state.phase !== 'lobby') {
+      if (typeof ack === 'function') ack({ ok: false, error: 'Already started — reset first' });
+      return;
     }
     advanceToQuestion(0);
     if (typeof ack === 'function') ack({ ok: true });
   });
 
+  // Manual next kept as optional override, but auto-pace is the default
   socket.on('host:next', (payload, ack) => {
     if (!socket.data.isHost && payload?.passcode !== HOST_PASSCODE) {
       if (typeof ack === 'function') ack({ ok: false, error: 'Unauthorized' });
       return;
     }
-    const next = state.questionIndex + 1;
-    if (next >= state.questions.length) {
-      endQuiz();
-    } else if (state.phase === 'question') {
-      // show between / leaderboard first
-      state.phase = 'between';
-      const board = scoreboard(state);
-      io.emit('quiz:between', {
-        leaderboard: board.slice(0, 5),
-        questionIndex: state.questionIndex,
-        totalQuestions: state.questions.length,
-      });
-      io.to('hosts').emit('host:update', hostSnapshot());
-    } else {
-      advanceToQuestion(next);
+    if (state.phase === 'question') {
+      finishQuestionRound();
+    } else if (state.phase === 'between') {
+      goToNextAfterBetween();
     }
     if (typeof ack === 'function') ack({ ok: true, phase: state.phase });
   });
@@ -464,6 +457,7 @@ io.on('connection', (socket) => {
       if (typeof ack === 'function') ack({ ok: false, error: 'Unauthorized' });
       return;
     }
+    clearQuizTimers(state);
     endQuiz();
     if (typeof ack === 'function') ack({ ok: true });
   });
@@ -473,6 +467,7 @@ io.on('connection', (socket) => {
       if (typeof ack === 'function') ack({ ok: false, error: 'Unauthorized' });
       return;
     }
+    clearQuizTimers(state);
     state = createQuizState(questions);
     io.emit('quiz:reset', {});
     broadcastCounts();
@@ -507,6 +502,7 @@ io.on('connection', (socket) => {
 });
 
 function advanceToQuestion(index) {
+  clearQuizTimers(state);
   state.questionIndex = index;
   state.phase = 'question';
   state.questionStartedAt = Date.now();
@@ -518,14 +514,61 @@ function advanceToQuestion(index) {
     questionIndex: index,
     totalQuestions: state.questions.length,
     durationMs: state.questionDurationMs,
+    betweenDurationMs: state.betweenDurationMs,
     startedAt: state.questionStartedAt,
   };
 
   io.emit('quiz:question', payload);
   io.to('hosts').emit('host:update', hostSnapshot());
+
+  // Auto: when time is up → between screen → next question
+  state.timers.question = setTimeout(() => {
+    if (state.phase === 'question' && state.questionIndex === index) {
+      finishQuestionRound();
+    }
+  }, state.questionDurationMs);
+}
+
+function finishQuestionRound() {
+  if (state.phase !== 'question') return;
+  clearQuizTimers(state);
+
+  const q = state.questions[state.questionIndex];
+  io.emit('quiz:timeout', {
+    questionIndex: state.questionIndex,
+    correctIndex: q ? q.correct : null,
+  });
+
+  state.phase = 'between';
+  const board = scoreboard(state);
+  const betweenPayload = {
+    leaderboard: board.slice(0, 5),
+    questionIndex: state.questionIndex,
+    totalQuestions: state.questions.length,
+    durationMs: state.betweenDurationMs,
+  };
+  io.emit('quiz:between', betweenPayload);
+  io.to('hosts').emit('host:update', hostSnapshot());
+
+  state.timers.between = setTimeout(() => {
+    if (state.phase === 'between') {
+      goToNextAfterBetween();
+    }
+  }, state.betweenDurationMs);
+}
+
+function goToNextAfterBetween() {
+  clearQuizTimers(state);
+  const next = state.questionIndex + 1;
+  if (next >= state.questions.length) {
+    endQuiz();
+  } else {
+    advanceToQuestion(next);
+  }
 }
 
 function endQuiz() {
+  clearQuizTimers(state);
   state.phase = 'ended';
   const board = scoreboard(state);
 

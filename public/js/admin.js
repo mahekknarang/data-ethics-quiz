@@ -157,6 +157,24 @@
     document.getElementById('btn-next').disabled = phase === 'lobby' || phase === 'ended';
     document.getElementById('btn-end').disabled = phase === 'lobby' || phase === 'ended';
 
+    const hint = document.getElementById('pace-hint');
+    if (hint) {
+      if (phase === 'lobby') {
+        hint.textContent =
+          'Auto-paced: ~22s per question · ~17s between · you only tap Start';
+      } else if (phase === 'question') {
+        hint.textContent = `Question ${snap.questionIndex + 1}/${snap.totalQuestions} · ~${Math.round(
+          (snap.durationMs || 22000) / 1000
+        )}s left for answers (auto)`;
+      } else if (phase === 'between') {
+        hint.textContent = `Between screens · ~${Math.round(
+          (snap.betweenDurationMs || 17000) / 1000
+        )}s then next question (auto)`;
+      } else {
+        hint.textContent = 'Quiz complete — open Data reveal';
+      }
+    }
+
     if (phase === 'ended') {
       document.getElementById('tab-reveal').classList.add('pulse');
     }
