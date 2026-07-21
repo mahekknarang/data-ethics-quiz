@@ -85,6 +85,7 @@ function hostSnapshot() {
       : null,
     answered: answeredCount(state),
     durationMs: state.questionDurationMs,
+    feedbackDurationMs: state.feedbackDurationMs,
     betweenDurationMs: state.betweenDurationMs,
     startedAt: state.questionStartedAt,
     leaderboard: scoreboard(state).slice(0, 10),
@@ -436,7 +437,7 @@ io.on('connection', (socket) => {
     }
     if (state.phase === 'question') {
       finishQuestionRound();
-    } else if (state.phase === 'between') {
+    } else if (state.phase === 'feedback' || state.phase === 'between') {
       goToNextAfterBetween();
     }
     if (typeof ack === 'function') ack({ ok: true, phase: state.phase });
@@ -514,6 +515,7 @@ function advanceToQuestion(index) {
     questionIndex: index,
     totalQuestions: state.questions.length,
     durationMs: state.questionDurationMs,
+    feedbackDurationMs: state.feedbackDurationMs,
     betweenDurationMs: state.betweenDurationMs,
     startedAt: state.questionStartedAt,
   };
@@ -534,27 +536,36 @@ function finishQuestionRound() {
   clearQuizTimers(state);
 
   const q = state.questions[state.questionIndex];
+  state.phase = 'feedback';
+
+  // Page 1: correct / wrong / time-up feedback (~5s)
   io.emit('quiz:timeout', {
     questionIndex: state.questionIndex,
     correctIndex: q ? q.correct : null,
+    durationMs: state.feedbackDurationMs,
   });
-
-  state.phase = 'between';
-  const board = scoreboard(state);
-  const betweenPayload = {
-    leaderboard: board.slice(0, 5),
-    questionIndex: state.questionIndex,
-    totalQuestions: state.questions.length,
-    durationMs: state.betweenDurationMs,
-  };
-  io.emit('quiz:between', betweenPayload);
   io.to('hosts').emit('host:update', hostSnapshot());
 
-  state.timers.between = setTimeout(() => {
-    if (state.phase === 'between') {
-      goToNextAfterBetween();
-    }
-  }, state.betweenDurationMs);
+  state.timers.feedback = setTimeout(() => {
+    if (state.phase !== 'feedback') return;
+
+    // Page 2: between verses / mini leaderboard (~5s)
+    state.phase = 'between';
+    const board = scoreboard(state);
+    io.emit('quiz:between', {
+      leaderboard: board.slice(0, 5),
+      questionIndex: state.questionIndex,
+      totalQuestions: state.questions.length,
+      durationMs: state.betweenDurationMs,
+    });
+    io.to('hosts').emit('host:update', hostSnapshot());
+
+    state.timers.between = setTimeout(() => {
+      if (state.phase === 'between') {
+        goToNextAfterBetween();
+      }
+    }, state.betweenDurationMs);
+  }, state.feedbackDurationMs);
 }
 
 function goToNextAfterBetween() {

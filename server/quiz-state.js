@@ -9,14 +9,16 @@ function createQuizState(questions) {
     questions: questions || [],
     questionIndex: -1,
     questionStartedAt: null,
-    // Auto-paced: ~22s to answer, ~17s between questions
+    // Auto-paced: ~22s to answer, then 5s feedback + 5s between
     questionDurationMs: 22000,
-    betweenDurationMs: 17000,
+    feedbackDurationMs: 5000,
+    betweenDurationMs: 5000,
     players: new Map(), // socketId -> player
     answersThisRound: new Map(), // socketId -> answer payload
     joinOrder: 0,
     timers: {
       question: null,
+      feedback: null,
       between: null,
     },
   };
@@ -58,13 +60,12 @@ function playerCount(state) {
 }
 
 function clearQuizTimers(state) {
-  if (state.timers?.question) {
-    clearTimeout(state.timers.question);
-    state.timers.question = null;
-  }
-  if (state.timers?.between) {
-    clearTimeout(state.timers.between);
-    state.timers.between = null;
+  if (!state.timers) return;
+  for (const key of Object.keys(state.timers)) {
+    if (state.timers[key]) {
+      clearTimeout(state.timers[key]);
+      state.timers[key] = null;
+    }
   }
 }
 

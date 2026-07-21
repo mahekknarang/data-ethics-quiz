@@ -282,7 +282,13 @@
   socket.on('quiz:timeout', (payload) => {
     if (payload.questionIndex !== questionIndex) return;
     stopTimer();
-    if (answered) return;
+    // Already answered → stay on feedback until between arrives (~5s)
+    if (answered) {
+      if (!screens.feedback.classList.contains('active')) {
+        showScreen('feedback');
+      }
+      return;
+    }
 
     answered = true;
     document.querySelectorAll('.answer-btn').forEach((b, i) => {

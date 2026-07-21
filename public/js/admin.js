@@ -161,15 +161,15 @@
     if (hint) {
       if (phase === 'lobby') {
         hint.textContent =
-          'Auto-paced: ~22s per question · ~17s between · you only tap Start';
+          'Auto-paced: ~22s per question · 5s feedback · 5s between · tap Start once';
       } else if (phase === 'question') {
         hint.textContent = `Question ${snap.questionIndex + 1}/${snap.totalQuestions} · ~${Math.round(
           (snap.durationMs || 22000) / 1000
-        )}s left for answers (auto)`;
+        )}s to answer (auto)`;
+      } else if (phase === 'feedback') {
+        hint.textContent = 'Feedback screen · 5s (auto)';
       } else if (phase === 'between') {
-        hint.textContent = `Between screens · ~${Math.round(
-          (snap.betweenDurationMs || 17000) / 1000
-        )}s then next question (auto)`;
+        hint.textContent = 'Between screen · 5s then next (auto)';
       } else {
         hint.textContent = 'Quiz complete — open Data reveal';
       }
