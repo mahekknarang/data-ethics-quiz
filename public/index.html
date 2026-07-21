@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Data Ethics Quiz</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/shared.css" />
+    <link rel="stylesheet" href="/css/player.css" />
+  </head>
+  <body class="player">
+    <main id="screen-join" class="screen active">
+      <div class="join-doc">
+        <p class="join-kicker">Live session · Data Ethics</p>
+        <h1 class="join-headline" id="join-headline">yo, tap in 👇</h1>
+        <p class="join-sub" id="join-sub">no cap, just your name 🧢</p>
+        <form class="join-form" id="join-form">
+          <label for="name">Display name</label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            maxlength="24"
+            autocomplete="nickname"
+            placeholder="First name"
+            required
+          />
+          <button type="submit" class="btn-primary" id="join-btn">Accept &amp; Continue</button>
+        </form>
+        <p class="fineprint">
+          <a href="/terms" id="fineprint-link" target="_blank" rel="noopener"
+            >By joining, you agree to standard participation terms.</a
+          >
+          <span id="fineprint-teaser"> — the fine print nobody reads</span>
+        </p>
+      </div>
+    </main>
+
+    <main id="screen-lobby" class="screen">
+      <div class="progress-dots" id="dots-lobby"></div>
+      <div class="lobby-card">
+        <h2 id="lobby-title">you're in. now we wait 🍿</h2>
+        <div class="lobby-count mono" id="lobby-count">1</div>
+        <p class="lobby-hint" id="lobby-hint">loading the rest of the squad... 👥</p>
+      </div>
+    </main>
+
+    <main id="screen-question" class="screen">
+      <div class="progress-dots" id="dots-q"></div>
+      <div class="q-header">
+        <div class="score-pill mono" id="score-pill">0 pts</div>
+        <div class="timer-wrap" aria-live="polite">
+          <svg width="52" height="52" viewBox="0 0 52 52">
+            <circle class="timer-ring" cx="26" cy="26" r="22" />
+            <circle class="timer-ring-fg" id="timer-ring" cx="26" cy="26" r="22" />
+          </svg>
+          <div class="timer-num mono" id="timer-num">18</div>
+        </div>
+      </div>
+      <div id="q-body">
+        <h2 class="q-text" id="q-text"></h2>
+        <div class="answers" id="answers"></div>
+      </div>
+      <p class="fineprint" id="timer-nudge" style="text-align: center; margin-top: 1rem"></p>
+    </main>
+
+    <main id="screen-feedback" class="screen">
+      <div class="progress-dots" id="dots-fb"></div>
+      <div class="feedback-card" id="feedback-card">
+        <h2 id="feedback-line"></h2>
+        <p class="feedback-score mono" id="feedback-score"></p>
+      </div>
+    </main>
+
+    <main id="screen-between" class="screen">
+      <div class="between-card">
+        <h2 id="between-title">cooking up the next one 👨‍🍳🔥</h2>
+        <p class="lobby-hint" id="lb-title">the tea has been spilled ☕</p>
+        <ol class="lb-list" id="between-lb"></ol>
+      </div>
+    </main>
+
+    <main id="screen-end" class="screen">
+      <div class="end-card">
+        <h2 id="end-title">gg. thanks for playing 🎮</h2>
+        <div class="lobby-count mono" id="end-score">0</div>
+        <p class="lobby-hint mono" id="end-rank"></p>
+        <p class="end-note">
+          Thanks for playing — stick around, there's something you should see.
+        </p>
+        <ol class="lb-list" id="end-lb"></ol>
+      </div>
+    </main>
+
+    <div class="confetti-burst hidden" id="confetti"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/copy.js"></script>
+    <script src="/js/player.js"></script>
+  </body>
+</html>

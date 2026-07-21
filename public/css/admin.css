@@ -1,0 +1,104 @@
+/* All-in-one admin: tabs between run + reveal */
+.admin-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.admin-tab {
+  flex: 1;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  background: #1a1e26;
+  color: #8b93a0;
+  border: 1px solid #2a303b;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.admin-tab.active {
+  background: var(--cobalt);
+  border-color: var(--cobalt);
+  color: #fff;
+}
+
+.admin-tab.pulse {
+  box-shadow: 0 0 0 2px rgba(255, 91, 57, 0.55);
+  color: #fff;
+  border-color: var(--amber);
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+body.admin.reveal-mode {
+  background: var(--dash-bg);
+  color: var(--dash-text);
+}
+
+body.admin.reveal-mode .host-shell {
+  background: transparent;
+}
+
+body.admin.reveal-mode .host-top h1,
+body.admin.reveal-mode .stat .value {
+  color: var(--dash-text);
+}
+
+body.admin.reveal-mode .admin-tab:not(.active) {
+  background: #1c1f26;
+  border-color: #2c323c;
+}
+
+#panel-reveal .dash-shell {
+  padding: 0;
+  max-width: none;
+}
+
+#panel-reveal .dash-header {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+
+#panel-reveal .card {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+
+body.admin.reveal-mode #panel-reveal .card {
+  animation: cardIn 420ms var(--ease) forwards;
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+body.admin.reveal-mode #panel-reveal .card:nth-child(1) {
+  animation-delay: 80ms;
+}
+body.admin.reveal-mode #panel-reveal .card:nth-child(2) {
+  animation-delay: 160ms;
+}
+body.admin.reveal-mode #panel-reveal .card:nth-child(3) {
+  animation-delay: 240ms;
+}
+body.admin.reveal-mode #panel-reveal .card:nth-child(4) {
+  animation-delay: 320ms;
+}
+body.admin.reveal-mode #panel-reveal .card:nth-child(5) {
+  animation-delay: 400ms;
+}
+body.admin.reveal-mode #panel-reveal .card:nth-child(6) {
+  animation-delay: 480ms;
+}
+body.admin.reveal-mode #panel-reveal .card:nth-child(7) {
+  animation-delay: 560ms;
+}
+body.admin.reveal-mode #panel-reveal .card:nth-child(8) {
+  animation-delay: 640ms;
+}

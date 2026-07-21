@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin · Data Ethics Quiz</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/shared.css" />
+    <link rel="stylesheet" href="/css/host.css" />
+    <link rel="stylesheet" href="/css/dashboard.css" />
+    <link rel="stylesheet" href="/css/admin.css" />
+  </head>
+  <body class="host admin">
+    <div class="gate" id="gate">
+      <form class="gate-card" id="gate-form">
+        <h1>Admin access</h1>
+        <p style="margin: 0; color: #888; font-size: 0.9rem">
+          One panel for running the quiz + revealing the data
+        </p>
+        <input type="password" id="passcode" placeholder="Passcode" autocomplete="current-password" />
+        <button type="submit">Enter</button>
+        <div class="gate-error" id="gate-error"></div>
+      </form>
+    </div>
+
+    <div class="curtain" id="curtain">
+      <p id="curtain-text">hold on, pulling up something you should see... 🔦</p>
+    </div>
+
+    <div class="host-shell" id="shell">
+      <header class="host-top">
+        <div>
+          <p class="brand">Data Ethics · All-in-one admin</p>
+          <h1 id="host-title">Lobby</h1>
+        </div>
+        <div class="stat-row">
+          <div class="stat">
+            <div class="label">Players</div>
+            <div class="value mono" id="stat-players">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Answered</div>
+            <div class="value mono" id="stat-answered">0/0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Question</div>
+            <div class="value mono" id="stat-q">—</div>
+          </div>
+        </div>
+      </header>
+
+      <nav class="admin-tabs" role="tablist">
+        <button type="button" class="admin-tab active" data-tab="run" id="tab-run">
+          1 · Run quiz
+        </button>
+        <button type="button" class="admin-tab" data-tab="reveal" id="tab-reveal">
+          2 · Data reveal
+        </button>
+      </nav>
+
+      <!-- RUN QUIZ -->
+      <div class="tab-panel active" id="panel-run">
+        <div class="host-main">
+          <section class="panel" id="panel-lobby">
+            <h2>Join link</h2>
+            <div class="qr-wrap">
+              <img id="qr" alt="QR code to join quiz" />
+              <div class="join-url mono" id="join-url"></div>
+              <div class="live-count mono" id="live-count">0 <span>joined</span></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Live stage</h2>
+            <div class="q-display" id="stage">
+              <div class="phase mono" id="phase-label">LOBBY</div>
+              <p class="question" id="stage-q">Waiting for players…</p>
+              <div class="options-preview" id="options-preview"></div>
+              <div class="tally mono" id="tally">
+                <span class="num" id="tally-num">0</span> / <span id="tally-total">0</span> answered
+              </div>
+            </div>
+            <ol class="host-lb" id="host-lb"></ol>
+          </section>
+        </div>
+
+        <footer class="host-footer">
+          <div class="controls">
+            <button type="button" class="primary" id="btn-start">Start Quiz</button>
+            <button type="button" id="btn-next" disabled>Next Question</button>
+            <button type="button" id="btn-end" disabled>End Quiz</button>
+            <button type="button" class="danger" id="btn-reset">Reset Session</button>
+            <button type="button" class="primary" id="btn-goto-reveal">Show data reveal →</button>
+          </div>
+        </footer>
+      </div>
+
+      <!-- DATA REVEAL -->
+      <div class="tab-panel" id="panel-reveal">
+        <div class="dash-shell ready" id="dash-inner">
+          <header class="dash-header">
+            <p class="eyebrow">Session telemetry · live from the database</p>
+            <h1>
+              <span class="accent" id="headline-count">0</span> people just handed over data without
+              reading a single word.
+            </h1>
+            <p class="sub">
+              Everything below was captured the moment they tapped Accept — the same quiet collection
+              pattern used by ordinary apps.
+            </p>
+          </header>
+
+          <div class="stat-grid" id="grid">
+            <section class="card">
+              <h2>Headline</h2>
+              <div class="big-stat mono" id="stat-total">0</div>
+              <p class="big-stat-label" id="stat-total-label">players joined this session</p>
+            </section>
+
+            <section class="card">
+              <h2>Device type</h2>
+              <div class="bars" id="bars-device"></div>
+            </section>
+            <section class="card">
+              <h2>OS</h2>
+              <div class="bars" id="bars-os"></div>
+            </section>
+            <section class="card">
+              <h2>Browser</h2>
+              <div class="bars" id="bars-browser"></div>
+            </section>
+
+            <section class="card">
+              <h2>The join-screen stat</h2>
+              <div class="join-stat mono" id="avg-join">—</div>
+              <p class="join-stat-note">Average time spent “reading” the terms before agreeing.</p>
+              <p class="join-stat-note" style="color: #ecece6; margin-bottom: 0.5rem">
+                Hall of fame — fastest five (first names only)
+              </p>
+              <ol class="fame-list" id="fame"></ol>
+            </section>
+
+            <section class="card">
+              <h2>Behavioral fingerprint</h2>
+              <p class="join-stat-note" style="color: #ecece6">
+                You didn’t tell us any of this. Your phone did.
+              </p>
+              <p class="join-stat-note">Screen clusters</p>
+              <div class="bars" id="bars-screen"></div>
+              <p class="join-stat-note" style="margin-top: 1rem">Timezones</p>
+              <div class="bars" id="bars-tz"></div>
+            </section>
+
+            <section class="card">
+              <h2>In-quiz behavior</h2>
+              <div class="join-stat mono" id="avg-answer">—</div>
+              <p class="join-stat-note">
+                Average answer speed across all submissions —
+                <span id="answer-count">0</span> answers logged.
+              </p>
+            </section>
+
+            <section class="card closing">
+              <h2>Closing</h2>
+              <p>
+                This was collected exactly the way real apps collect data: a light disclosure almost
+                nobody reads, then quiet aggregation in a separate database while you played. The
+                difference tonight is that we’re showing you the receipt.
+              </p>
+              <span class="tag">Nothing here singles anyone out by IP or full fingerprint.</span>
+            </section>
+          </div>
+
+          <p class="source-pill mono" id="source">source: —</p>
+          <div class="controls" style="margin-top: 1rem">
+            <button type="button" id="btn-refresh-stats">Refresh stats</button>
+            <button type="button" id="btn-back-run">← Back to Run quiz</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/copy.js"></script>
+    <script src="/js/admin.js"></script>
+  </body>
+</html>

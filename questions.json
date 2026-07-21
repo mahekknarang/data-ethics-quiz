@@ -1,0 +1,102 @@
+[
+  {
+    "text": "When an app says it collects \"device information,\" what does that usually include?",
+    "options": [
+      "Only your phone model",
+      "OS, browser, screen size, language, and more",
+      "Just your IP address",
+      "Nothing — it's a placeholder"
+    ],
+    "correct": 1
+  },
+  {
+    "text": "What's the average time most people spend reading terms of service?",
+    "options": [
+      "About 10 minutes",
+      "Around 90 seconds",
+      "Under 10 seconds — if at all",
+      "They always read every word"
+    ],
+    "correct": 2
+  },
+  {
+    "text": "Which of these can a website usually learn about you without asking?",
+    "options": [
+      "Your full legal name",
+      "Your timezone and screen resolution",
+      "Your bank balance",
+      "Your home address"
+    ],
+    "correct": 1
+  },
+  {
+    "text": "\"Informed consent\" in data ethics means:",
+    "options": [
+      "You clicked Accept",
+      "You understood what you agreed to before agreeing",
+      "The company posted a privacy policy somewhere",
+      "Your data will never be sold"
+    ],
+    "correct": 1
+  },
+  {
+    "text": "Behavioral data (how fast you answer, how long you linger) is useful to companies because:",
+    "options": [
+      "It's required by law to collect",
+      "It reveals patterns about you beyond what you type",
+      "It only measures technical performance",
+      "It can't be linked back to individuals"
+    ],
+    "correct": 1
+  },
+  {
+    "text": "A \"dark pattern\" in UX is:",
+    "options": [
+      "A dark-mode theme",
+      "A design that nudges you into choices you might not want",
+      "A bug that crashes the app",
+      "An encrypted data pipeline"
+    ],
+    "correct": 1
+  },
+  {
+    "text": "Why do free apps often feel so personalized?",
+    "options": [
+      "Magic",
+      "Your data is the product — profiles drive ads and recommendations",
+      "Governments fund personalization",
+      "Phones come pre-loaded with your preferences"
+    ],
+    "correct": 1
+  },
+  {
+    "text": "If a quiz logs how long you sat on the join screen, that's an example of:",
+    "options": [
+      "Metadata / telemetry collection",
+      "End-to-end encryption",
+      "Two-factor authentication",
+      "Open-source licensing"
+    ],
+    "correct": 0
+  },
+  {
+    "text": "The most ethical way to handle demo/session data after a talk is:",
+    "options": [
+      "Keep it forever for research",
+      "Sell it to advertisers",
+      "Delete it once the learning goal is done",
+      "Post everyone's names publicly"
+    ],
+    "correct": 2
+  },
+  {
+    "text": "What's one practical habit that actually helps with data ethics day-to-day?",
+    "options": [
+      "Never use the internet",
+      "Pause for 5 seconds and skim what you're agreeing to",
+      "Trust every \"we care about privacy\" banner",
+      "Share your location with every app"
+    ],
+    "correct": 1
+  }
+]

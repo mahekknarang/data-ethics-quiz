@@ -1,0 +1,282 @@
+(() => {
+  const pageLoadAt = Date.now();
+  const socket = io();
+
+  const screens = {
+    join: document.getElementById('screen-join'),
+    lobby: document.getElementById('screen-lobby'),
+    question: document.getElementById('screen-question'),
+    feedback: document.getElementById('screen-feedback'),
+    between: document.getElementById('screen-between'),
+    end: document.getElementById('screen-end'),
+  };
+
+  let playerId = null;
+  let totalQuestions = 10;
+  let questionIndex = -1;
+  let durationMs = 18000;
+  let startedAt = null;
+  let timerRaf = null;
+  let answered = false;
+  let score = 0;
+  let lowNudgeShown = false;
+
+  const CIRC = 2 * Math.PI * 22;
+
+  // Randomize join copy on load
+  document.getElementById('join-headline').textContent = pickCopy('join_headline');
+  document.getElementById('join-sub').textContent = pickCopy('join_subtext_name');
+  document.getElementById('join-btn').textContent = pickCopy('join_button');
+  document.getElementById('fineprint-teaser').textContent =
+    ' — ' + pickCopy('join_fineprint_teaser');
+
+  function showScreen(name) {
+    Object.values(screens).forEach((el) => el.classList.remove('active'));
+    screens[name].classList.add('active');
+    document.body.classList.toggle('quiz-mode', name !== 'join');
+  }
+
+  function renderDots(containerId) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.innerHTML = '';
+    for (let i = 0; i < totalQuestions; i++) {
+      const s = document.createElement('span');
+      if (i < questionIndex) s.classList.add('done');
+      if (i === questionIndex) s.classList.add('current');
+      el.appendChild(s);
+    }
+  }
+
+  function formatLb(list, targetId) {
+    const ol = document.getElementById(targetId);
+    ol.innerHTML = '';
+    (list || []).forEach((row) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span><span class="rank mono">#${row.rank}</span>${escapeHtml(
+        row.name
+      )}</span><span class="pts mono">${row.score}</span>`;
+      ol.appendChild(li);
+    });
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function stopTimer() {
+    if (timerRaf) cancelAnimationFrame(timerRaf);
+    timerRaf = null;
+  }
+
+  function startTimer() {
+    stopTimer();
+    lowNudgeShown = false;
+    const ring = document.getElementById('timer-ring');
+    ring.style.strokeDasharray = String(CIRC);
+    ring.classList.remove('urgent');
+    document.getElementById('timer-nudge').textContent = '';
+
+    const tick = () => {
+      const elapsed = Date.now() - startedAt;
+      const left = Math.max(0, durationMs - elapsed);
+      const secs = Math.ceil(left / 1000);
+      document.getElementById('timer-num').textContent = String(secs);
+      const pct = left / durationMs;
+      ring.style.strokeDashoffset = String(CIRC * (1 - pct));
+      if (pct < 0.3) {
+        ring.classList.add('urgent');
+        if (!lowNudgeShown) {
+          lowNudgeShown = true;
+          document.getElementById('timer-nudge').textContent = pickCopy('timer_low');
+        }
+      }
+      if (left > 0 && !answered) {
+        timerRaf = requestAnimationFrame(tick);
+      }
+    };
+    tick();
+  }
+
+  function burstConfetti() {
+    const root = document.getElementById('confetti');
+    root.classList.remove('hidden');
+    root.innerHTML = '';
+    const colors = ['#3654FF', '#22c55e', '#FF5B39', '#4FD1C5', '#fbbf24'];
+    for (let i = 0; i < 28; i++) {
+      const bit = document.createElement('i');
+      bit.style.left = Math.random() * 100 + '%';
+      bit.style.top = 20 + Math.random() * 20 + '%';
+      bit.style.background = colors[i % colors.length];
+      bit.style.animationDelay = Math.random() * 120 + 'ms';
+      root.appendChild(bit);
+    }
+    setTimeout(() => {
+      root.classList.add('hidden');
+      root.innerHTML = '';
+    }, 800);
+  }
+
+  document.getElementById('join-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = document.getElementById('name').value.trim();
+    if (!name) return;
+
+    const joinedAt = Date.now();
+    const payload = {
+      name,
+      page_load_at: pageLoadAt,
+      joined_at: joinedAt,
+      time_on_join_screen_ms: joinedAt - pageLoadAt,
+      screen_w: window.screen?.width || window.innerWidth,
+      screen_h: window.screen?.height || window.innerHeight,
+      language: navigator.language || null,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+      useragent_raw: navigator.userAgent,
+    };
+
+    socket.emit('player:join', payload, (res) => {
+      if (!res?.ok) {
+        alert(res?.error || 'Could not join');
+        return;
+      }
+      playerId = res.playerId;
+      localStorage.setItem('deq_player', String(playerId));
+      applySnapshot(res.snapshot);
+      document.getElementById('lobby-title').textContent = pickCopy('lobby_joined');
+      document.getElementById('lobby-hint').textContent = pickCopy('lobby_loading_others');
+      showScreen('lobby');
+    });
+  });
+
+  function applySnapshot(snap) {
+    if (!snap) return;
+    if (snap.totalQuestions) totalQuestions = snap.totalQuestions;
+    if (typeof snap.playerCount === 'number') {
+      document.getElementById('lobby-count').textContent = String(snap.playerCount);
+    }
+    if (typeof snap.score === 'number') {
+      score = snap.score;
+      document.getElementById('score-pill').textContent = `${score} pts`;
+    }
+  }
+
+  socket.on('lobby:count', ({ count }) => {
+    document.getElementById('lobby-count').textContent = String(count);
+  });
+
+  socket.on('quiz:question', (payload) => {
+    answered = false;
+    questionIndex = payload.questionIndex;
+    totalQuestions = payload.totalQuestions;
+    durationMs = payload.durationMs;
+    startedAt = payload.startedAt;
+    renderDots('dots-q');
+    renderDots('dots-fb');
+    renderDots('dots-lobby');
+
+    const body = document.getElementById('q-body');
+    body.classList.remove('q-slide-out');
+    body.classList.add('q-slide-in');
+
+    document.getElementById('q-text').textContent = payload.question.text;
+    const box = document.getElementById('answers');
+    box.innerHTML = '';
+    payload.question.options.forEach((opt, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'answer-btn';
+      btn.textContent = opt;
+      btn.addEventListener('click', () => submitAnswer(idx, btn));
+      box.appendChild(btn);
+    });
+
+    showScreen('question');
+    startTimer();
+  });
+
+  function submitAnswer(answerIndex, btn) {
+    if (answered) return;
+    answered = true;
+    stopTimer();
+
+    document.querySelectorAll('.answer-btn').forEach((b) => {
+      b.disabled = true;
+    });
+    btn.classList.add('selected');
+
+    const answerTimeMs = Date.now() - startedAt;
+    socket.emit(
+      'answer:submit',
+      {
+        question_id: questionIndex,
+        answer_index: answerIndex,
+        answer_time_ms: answerTimeMs,
+      },
+      (res) => {
+        if (!res?.ok) return;
+        score = res.score;
+        document.getElementById('score-pill').textContent = `${score} pts`;
+
+        document.querySelectorAll('.answer-btn').forEach((b, i) => {
+          if (i === res.correctIndex) b.classList.add('reveal-correct');
+          else if (i === answerIndex && !res.correct) b.classList.add('reveal-wrong');
+        });
+
+        const card = document.getElementById('feedback-card');
+        card.classList.remove('ok', 'bad');
+        card.classList.add(res.correct ? 'ok' : 'bad');
+        document.getElementById('feedback-line').textContent = res.correct
+          ? pickCopy('answer_correct')
+          : pickCopy('answer_wrong');
+        document.getElementById('feedback-score').textContent = res.correct
+          ? `+${res.points} · ${score} pts`
+          : `${score} pts`;
+
+        if (res.correct && res.streak >= 2) {
+          document.getElementById('score-pill').classList.add('streak');
+          burstConfetti();
+          setTimeout(
+            () => document.getElementById('score-pill').classList.remove('streak'),
+            600
+          );
+        }
+
+        setTimeout(() => showScreen('feedback'), 450);
+      }
+    );
+  }
+
+  socket.on('quiz:between', (payload) => {
+    document.getElementById('between-title').textContent = pickCopy('between_questions');
+    document.getElementById('lb-title').textContent = pickCopy('leaderboard');
+    formatLb(payload.leaderboard, 'between-lb');
+    showScreen('between');
+  });
+
+  socket.on('quiz:leaderboard', (payload) => {
+    formatLb(payload.leaderboard, 'between-lb');
+    document.getElementById('lb-title').textContent = pickCopy('leaderboard');
+    showScreen('between');
+  });
+
+  socket.on('quiz:ended', (payload) => {
+    stopTimer();
+    document.getElementById('end-title').textContent = pickCopy('end_screen');
+    document.getElementById('end-score').textContent = String(payload.score ?? score);
+    document.getElementById('end-rank').textContent =
+      payload.rank != null
+        ? `rank #${payload.rank} of ${payload.totalPlayers}`
+        : '';
+    formatLb(payload.leaderboard, 'end-lb');
+    showScreen('end');
+  });
+
+  socket.on('quiz:reset', () => {
+    location.reload();
+  });
+})();

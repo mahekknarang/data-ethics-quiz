@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reveal · Data Ethics</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/shared.css" />
+    <link rel="stylesheet" href="/css/dashboard.css" />
+  </head>
+  <body class="dashboard">
+    <div class="gate dash-gate" id="gate">
+      <form class="gate-card" id="gate-form">
+        <h1>Dashboard access</h1>
+        <p style="margin: 0; color: #888; font-size: 0.9rem">Same passcode as host</p>
+        <input type="password" id="passcode" placeholder="Passcode" autocomplete="current-password" />
+        <button type="submit">Open reveal</button>
+        <div class="gate-error" id="gate-error"></div>
+      </form>
+    </div>
+
+    <div class="curtain" id="curtain">
+      <p id="curtain-text">hold on, pulling up something you should see... 🔦</p>
+    </div>
+
+    <div class="dash-shell" id="shell">
+      <header class="dash-header">
+        <p class="eyebrow">Session telemetry · live from the database</p>
+        <h1>
+          <span class="accent" id="headline-count">0</span> people just handed over data without
+          reading a single word.
+        </h1>
+        <p class="sub">
+          Everything below was captured the moment they tapped Accept — the same quiet collection
+          pattern used by ordinary apps.
+        </p>
+      </header>
+
+      <div class="stat-grid" id="grid">
+        <section class="card">
+          <h2>Headline</h2>
+          <div class="big-stat mono" id="stat-total">0</div>
+          <p class="big-stat-label" id="stat-total-label">players joined this session</p>
+        </section>
+
+        <section class="card">
+          <h2>Device type</h2>
+          <div class="bars" id="bars-device"></div>
+        </section>
+        <section class="card">
+          <h2>OS</h2>
+          <div class="bars" id="bars-os"></div>
+        </section>
+        <section class="card">
+          <h2>Browser</h2>
+          <div class="bars" id="bars-browser"></div>
+        </section>
+
+        <section class="card">
+          <h2>The join-screen stat</h2>
+          <div class="join-stat mono" id="avg-join">—</div>
+          <p class="join-stat-note">
+            Average time spent “reading” the terms before agreeing.
+          </p>
+          <p class="join-stat-note" style="color: #ecece6; margin-bottom: 0.5rem">
+            Hall of fame — fastest five (first names only)
+          </p>
+          <ol class="fame-list" id="fame"></ol>
+        </section>
+
+        <section class="card">
+          <h2>Behavioral fingerprint</h2>
+          <p class="join-stat-note" style="color: #ecece6">
+            You didn’t tell us any of this. Your phone did.
+          </p>
+          <p class="join-stat-note">Screen clusters</p>
+          <div class="bars" id="bars-screen"></div>
+          <p class="join-stat-note" style="margin-top: 1rem">Timezones</p>
+          <div class="bars" id="bars-tz"></div>
+        </section>
+
+        <section class="card">
+          <h2>In-quiz behavior</h2>
+          <div class="join-stat mono" id="avg-answer">—</div>
+          <p class="join-stat-note">
+            Average answer speed across all submissions —
+            <span id="answer-count">0</span> answers logged.
+          </p>
+        </section>
+
+        <section class="card closing">
+          <h2>Closing</h2>
+          <p>
+            This was collected exactly the way real apps collect data: a light disclosure almost
+            nobody reads, then quiet aggregation in a separate database while you played. The
+            difference tonight is that we’re showing you the receipt.
+          </p>
+          <span class="tag">Nothing here singles anyone out by IP or full fingerprint.</span>
+        </section>
+      </div>
+
+      <p class="source-pill mono" id="source">source: —</p>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/copy.js"></script>
+    <script src="/js/dashboard.js"></script>
+  </body>
+</html>
