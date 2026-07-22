@@ -15,7 +15,7 @@
   let totalQuestions = 10;
   let questionIndex = -1;
   let durationMs = 22000;
-  let betweenDurationMs = 17000;
+  let betweenDurationMs = 8000;
   let startedAt = null;
   let timerRaf = null;
   let answered = false;
