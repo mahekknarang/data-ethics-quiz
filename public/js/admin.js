@@ -152,11 +152,11 @@
     document.getElementById('host-title').textContent =
       phase === 'lobby'
         ? 'Lobby'
-        : phase === 'question'
-          ? 'Live question'
-          : phase === 'between'
-            ? 'Between rounds'
-            : 'Final results';
+        : phase === 'running'
+          ? 'Quiz in progress (self-paced)'
+          : phase === 'ended'
+            ? 'Final results'
+            : phase.charAt(0).toUpperCase() + phase.slice(1);
 
     document.getElementById('btn-start').disabled = phase !== 'lobby';
     document.getElementById('btn-next').disabled = phase === 'lobby' || phase === 'ended';
@@ -167,14 +167,8 @@
       if (phase === 'lobby') {
         hint.textContent =
           'Auto-paced: ~22s per question · 5s feedback · 5s between · tap Start once';
-      } else if (phase === 'question') {
-        hint.textContent = `Question ${snap.questionIndex + 1}/${snap.totalQuestions} · ~${Math.round(
-          (snap.durationMs || 22000) / 1000
-        )}s to answer (auto)`;
-      } else if (phase === 'feedback') {
-        hint.textContent = 'Feedback screen · 5s (auto)';
-      } else if (phase === 'between') {
-        hint.textContent = 'Between screen · 5s then next (auto)';
+      } else if (phase === 'running') {
+        hint.textContent = `Self-paced flow running for ${snap.playerCount} players`;
       } else {
         hint.textContent = 'Quiz complete — open Data reveal';
       }
@@ -184,30 +178,32 @@
       document.getElementById('tab-reveal').classList.add('pulse');
     }
 
-    if (snap.questionIndex >= 0) {
-      document.getElementById('stat-q').textContent =
-        `${snap.questionIndex + 1}/${snap.totalQuestions}`;
-    } else {
-      document.getElementById('stat-q').textContent = '—';
-    }
+    const done = snap.doneCount || 0;
+    
+    document.getElementById('stat-q').textContent =
+      phase === 'running'
+        ? `${done}/${snap.playerCount} done`
+        : phase === 'ended'
+          ? `${snap.totalQuestions} Q\'s`
+          : '—';
 
     document.getElementById('stat-answered').textContent =
-      `${snap.answered}/${snap.playerCount}`;
-    animateTally(snap.answered);
+      `${done}/${snap.playerCount}`;
+    animateTally(done);
     document.getElementById('tally-total').textContent = String(snap.playerCount);
 
     const stageQ = document.getElementById('stage-q');
     const opts = document.getElementById('options-preview');
     opts.innerHTML = '';
 
-    if (snap.question) {
-      stageQ.textContent = snap.question.text;
-      (snap.question.options || []).forEach((o, i) => {
+    if (phase === 'running') {
+      stageQ.textContent = `Self-paced: ${done} of ${snap.playerCount} players finished`;
+      // Show per-player progress
+      (snap.players || []).forEach((p) => {
         const d = document.createElement('div');
-        d.textContent = o;
-        if (typeof snap.question.correct === 'number' && i === snap.question.correct) {
-          d.classList.add('correct');
-        }
+        const qNum = p.questionIndex >= 0 ? p.questionIndex + 1 : 0;
+        d.textContent = `${p.name}: Q${qNum}/${snap.totalQuestions} (${p.playerPhase})`;
+        if (p.done) d.style.opacity = '0.5';
         opts.appendChild(d);
       });
     } else if (phase === 'ended') {
