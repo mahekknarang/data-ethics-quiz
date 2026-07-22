@@ -82,7 +82,7 @@ function hostSnapshot() {
     questionIndex: state.questionIndex,
     totalQuestions: state.questions.length,
     question: q
-      ? { ...publicQuestion(q, state.questionIndex), correct: q.correct }
+      ? { ...publicQuestion(q, state.questionIndex), correct_index: q.correct_index }
       : null,
     answered: answeredCount(state),
     durationMs: state.questionDurationMs,
@@ -101,12 +101,13 @@ function hostSnapshot() {
 function playerSnapshot(player) {
   const board = scoreboard(state);
   const me = board.find((r) => r.id === player.id);
-  const q = state.questions[state.questionIndex];
+  const questionsList = player.shuffledQuestions || state.questions;
+  const q = questionsList[state.questionIndex];
   return {
     phase: state.phase,
     playerCount: playerCount(state),
     questionIndex: state.questionIndex,
-    totalQuestions: state.questions.length,
+    totalQuestions: questionsList.length,
     question: publicQuestion(q, state.questionIndex),
     durationMs: state.questionDurationMs,
     startedAt: state.questionStartedAt,
@@ -347,6 +348,9 @@ io.on('connection', (socket) => {
         answerTimes: [],
         answerLog: [],
         streak: 0,
+        shuffledQuestions: state.questions.length > 0 
+          ? (sessionSettings.shuffle ? [...state.questions].sort(() => Math.random() - 0.5) : [...state.questions])
+          : [],
       };
 
       state.players.set(socket.id, player);
@@ -388,7 +392,8 @@ io.on('connection', (socket) => {
     }
 
     const qIndex = state.questionIndex;
-    const q = state.questions[qIndex];
+    const questionsList = player.shuffledQuestions || state.questions;
+    const q = questionsList[qIndex];
     if (!q || Number(payload?.question_id) !== qIndex) {
       if (typeof ack === 'function') ack({ ok: false, error: 'Wrong question' });
       return;
@@ -407,7 +412,7 @@ io.on('connection', (socket) => {
         Number(payload.answer_time_ms) || Date.now() - (state.questionStartedAt || Date.now())
       )
     );
-    const correct = answerIndex === q.correct;
+    const correct = answerIndex === q.correct_index;
     const speedBonus = correct
       ? Math.max(0, Math.round((1 - answerTimeMs / state.questionDurationMs) * 400))
       : 0;
@@ -449,7 +454,7 @@ io.on('connection', (socket) => {
         points,
         score: player.score,
         streak: player.streak,
-        correctIndex: q.correct,
+        correctIndex: q.correct_index,
       });
     }
 
@@ -482,6 +487,11 @@ io.on('connection', (socket) => {
         }
       }
       state.questions = dbQuestions;
+      for (const player of state.players.values()) {
+        player.shuffledQuestions = sessionSettings.shuffle
+          ? [...dbQuestions].sort(() => Math.random() - 0.5)
+          : [...dbQuestions];
+      }
     } catch (err) {
       console.error('[quiz] host:start error fetching questions', err);
     }
@@ -570,19 +580,22 @@ function advanceToQuestion(index) {
   state.questionStartedAt = Date.now();
   state.answersThisRound = new Map();
 
-  const q = state.questions[index];
-  const payload = {
-    question: publicQuestion(q, index),
-    questionIndex: index,
-    totalQuestions: state.questions.length,
-    durationMs: state.questionDurationMs,
-    feedbackDurationMs: state.feedbackDurationMs,
-    betweenDurationMs: state.betweenDurationMs,
-    startedAt: state.questionStartedAt,
-  };
-
-  io.emit('quiz:question', payload);
   io.to('hosts').emit('host:update', hostSnapshot());
+
+  for (const [socketId, player] of state.players.entries()) {
+    const questionsList = player.shuffledQuestions || state.questions;
+    const q = questionsList[index];
+    const payload = {
+      question: publicQuestion(q, index),
+      questionIndex: index,
+      totalQuestions: questionsList.length,
+      durationMs: state.questionDurationMs,
+      feedbackDurationMs: state.feedbackDurationMs,
+      betweenDurationMs: state.betweenDurationMs,
+      startedAt: state.questionStartedAt,
+    };
+    io.to(socketId).emit('quiz:question', payload);
+  }
 
   // Auto: when time is up → between screen → next question
   state.timers.question = setTimeout(() => {
@@ -600,12 +613,17 @@ function finishQuestionRound() {
   state.phase = 'feedback';
 
   // Page 1: correct / wrong / time-up feedback (~5s)
-  io.emit('quiz:timeout', {
-    questionIndex: state.questionIndex,
-    correctIndex: q ? q.correct : null,
-    durationMs: state.feedbackDurationMs,
-  });
   io.to('hosts').emit('host:update', hostSnapshot());
+
+  for (const [socketId, player] of state.players.entries()) {
+    const questionsList = player.shuffledQuestions || state.questions;
+    const q = questionsList[state.questionIndex];
+    io.to(socketId).emit('quiz:timeout', {
+      questionIndex: state.questionIndex,
+      correctIndex: q ? q.correct_index : null,
+      durationMs: state.feedbackDurationMs,
+    });
+  }
 
   state.timers.feedback = setTimeout(() => {
     if (state.phase !== 'feedback') return;
