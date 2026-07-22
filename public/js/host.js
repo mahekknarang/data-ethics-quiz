@@ -148,7 +148,7 @@
 
     const lb = document.getElementById('host-lb');
     lb.innerHTML = '';
-    (snap.leaderboard || []).slice(0, 5).forEach((row) => {
+    (snap.leaderboard || []).slice(0, 3).forEach((row) => {
       const li = document.createElement('li');
       li.innerHTML = `<span class="r mono">#${row.rank}</span><span>${escapeHtml(
         row.name

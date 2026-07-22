@@ -87,7 +87,7 @@ function hostSnapshot() {
     playerCount: playerCount(state),
     totalQuestions: state.questions.length,
     doneCount: doneCount(state),
-    leaderboard: board.slice(0, 10),
+    leaderboard: board.slice(0, 3),
     players: [...state.players.values()].map((p) => ({
       name: p.name,
       score: p.score,
@@ -117,7 +117,7 @@ function playerSnapshot(player) {
     correctCount: player.correctCount,
     rank: me?.rank ?? null,
     answered: player.answered,
-    leaderboard: board.slice(0, 5),
+    leaderboard: board.slice(0, 3),
   };
 }
 
@@ -315,10 +315,15 @@ function finishPlayerQuestion(player) {
     correctIndex: q ? q.correct_index : null,
   });
 
-  // After 5s feedback, advance to between screen
+  // After 5s feedback, advance to between screen (or next/waiting if last question)
+  const isLast = player.questionIndex + 1 >= questionsList.length;
   player.timers.feedback = setTimeout(() => {
     if (player.phase === 'feedback') {
-      advancePlayerToBetween(player);
+      if (isLast) {
+        advancePlayerToNextQuestion(player);
+      } else {
+        advancePlayerToBetween(player);
+      }
     }
   }, FEEDBACK_DURATION_MS);
 
@@ -334,7 +339,7 @@ function advancePlayerToBetween(player) {
   const questionsList = player.shuffledQuestions || state.questions;
 
   io.to(player.socketId).emit('quiz:between', {
-    leaderboard: board.slice(0, 5),
+    leaderboard: board.slice(0, 3),
     questionIndex: player.questionIndex,
     totalQuestions: questionsList.length,
     durationMs: BETWEEN_DURATION_MS,
@@ -384,10 +389,16 @@ function showPlayerFeedback(player, feedbackData) {
 
   io.to(player.socketId).emit('quiz:feedback', feedbackData);
 
-  // After 5s, advance to between screen
+  // After 5s, advance to between screen (or next/waiting if last question)
+  const questionsList = player.shuffledQuestions || state.questions;
+  const isLast = player.questionIndex + 1 >= questionsList.length;
   player.timers.feedback = setTimeout(() => {
     if (player.phase === 'feedback') {
-      advancePlayerToBetween(player);
+      if (isLast) {
+        advancePlayerToNextQuestion(player);
+      } else {
+        advancePlayerToBetween(player);
+      }
     }
   }, FEEDBACK_DURATION_MS);
 
@@ -407,12 +418,12 @@ function endQuiz() {
       score: player.score,
       rank: me?.rank ?? null,
       totalPlayers: playerCount(state),
-      leaderboard: board.slice(0, 10),
+      leaderboard: board.slice(0, 3),
     });
   }
 
   io.to('hosts').emit('quiz:ended', {
-    leaderboard: board,
+    leaderboard: board.slice(0, 3),
     totalPlayers: playerCount(state),
   });
   io.to('hosts').emit('host:update', hostSnapshot());
@@ -689,7 +700,7 @@ io.on('connection', (socket) => {
       return;
     }
     const board = scoreboard(state);
-    io.emit('quiz:leaderboard', { leaderboard: board.slice(0, 10) });
+    io.emit('quiz:leaderboard', { leaderboard: board.slice(0, 3) });
     if (typeof ack === 'function') ack({ ok: true });
   });
 
