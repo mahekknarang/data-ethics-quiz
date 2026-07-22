@@ -33,3 +33,12 @@ create table if not exists answers (
 
 -- Optional: allow service role full access (default). Keep RLS off for service-role inserts,
 -- or add policies if you enable RLS. Do NOT expose the service role key to browsers.
+
+create table if not exists questions (
+  id bigint generated always as identity primary key,
+  text text not null,
+  options jsonb not null,
+  correct_index integer not null,
+  order_index integer not null default 0,
+  created_at timestamptz default now()
+);

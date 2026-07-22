@@ -8,7 +8,18 @@ const cors = require('cors');
 const { Server } = require('socket.io');
 const QRCode = require('qrcode');
 
-const { initSupabase, insertPlayer, insertAnswer, fetchRevealStats, aggregateStats } = require('./supabase');
+const {
+  initSupabase,
+  insertPlayer,
+  insertAnswer,
+  fetchRevealStats,
+  aggregateStats,
+  fetchQuestions,
+  insertQuestion,
+  updateQuestion,
+  deleteQuestion,
+  reorderQuestions
+} = require('./supabase');
 const { parseUserAgent, getClientIp } = require('./ua-parse');
 const {
   createQuizState,
@@ -38,18 +49,8 @@ function resolvePublicUrl(req) {
   return PUBLIC_URL;
 }
 
-const questionsPath = process.env.QUESTIONS_PATH
-  ? path.resolve(process.env.QUESTIONS_PATH)
-  : path.join(__dirname, '..', 'questions.json');
-
 let questions = [];
-try {
-  questions = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
-  console.log(`[quiz] Loaded ${questions.length} questions from ${questionsPath}`);
-} catch (err) {
-  console.error('[quiz] Failed to load questions.json:', err.message);
-  process.exit(1);
-}
+// Removed local questions.json loading as we now use Supabase
 
 initSupabase();
 
@@ -217,6 +218,49 @@ app.get('/api/dashboard/stats', requirePasscode, async (_req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ——— Question Management Routes ———
+
+let sessionSettings = { questionCount: 'all', shuffle: false };
+
+app.get('/api/settings', requirePasscode, (req, res) => {
+  res.json(sessionSettings);
+});
+
+app.post('/api/settings', requirePasscode, (req, res) => {
+  if (req.body.questionCount !== undefined) sessionSettings.questionCount = req.body.questionCount;
+  if (req.body.shuffle !== undefined) sessionSettings.shuffle = req.body.shuffle;
+  res.json({ ok: true, settings: sessionSettings });
+});
+
+app.get('/api/questions', requirePasscode, async (req, res) => {
+  const qs = await fetchQuestions();
+  res.json(qs);
+});
+
+app.post('/api/questions', requirePasscode, async (req, res) => {
+  const { data, error } = await insertQuestion(req.body);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.put('/api/questions/:id', requirePasscode, async (req, res) => {
+  const { data, error } = await updateQuestion(req.params.id, req.body);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.delete('/api/questions/:id', requirePasscode, async (req, res) => {
+  const { error } = await deleteQuestion(req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+app.post('/api/questions/reorder', requirePasscode, async (req, res) => {
+  const { error } = await reorderQuestions(req.body);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
 });
 
 // ——— Socket.IO ———
@@ -416,7 +460,7 @@ io.on('connection', (socket) => {
     io.to('hosts').emit('host:update', hostSnapshot());
   });
 
-  socket.on('host:start', (payload, ack) => {
+  socket.on('host:start', async (payload, ack) => {
     if (!socket.data.isHost && payload?.passcode !== HOST_PASSCODE) {
       if (typeof ack === 'function') ack({ ok: false, error: 'Unauthorized' });
       return;
@@ -425,6 +469,23 @@ io.on('connection', (socket) => {
       if (typeof ack === 'function') ack({ ok: false, error: 'Already started — reset first' });
       return;
     }
+    
+    try {
+      let dbQuestions = await fetchQuestions();
+      if (sessionSettings.shuffle) {
+        dbQuestions = dbQuestions.sort(() => Math.random() - 0.5);
+      }
+      if (sessionSettings.questionCount !== 'all') {
+        const limit = parseInt(sessionSettings.questionCount, 10);
+        if (!isNaN(limit) && limit > 0) {
+          dbQuestions = dbQuestions.slice(0, limit);
+        }
+      }
+      state.questions = dbQuestions;
+    } catch (err) {
+      console.error('[quiz] host:start error fetching questions', err);
+    }
+    
     advanceToQuestion(0);
     if (typeof ack === 'function') ack({ ok: true });
   });
@@ -463,13 +524,13 @@ io.on('connection', (socket) => {
     if (typeof ack === 'function') ack({ ok: true });
   });
 
-  socket.on('host:reset', (payload, ack) => {
+  socket.on('host:reset', async (payload, ack) => {
     if (!socket.data.isHost && payload?.passcode !== HOST_PASSCODE) {
       if (typeof ack === 'function') ack({ ok: false, error: 'Unauthorized' });
       return;
     }
     clearQuizTimers(state);
-    state = createQuizState(questions);
+    state = createQuizState([]);
     io.emit('quiz:reset', {});
     broadcastCounts();
     if (typeof ack === 'function') ack({ ok: true });

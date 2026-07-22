@@ -50,11 +50,16 @@
     });
     document.getElementById('panel-run').classList.toggle('active', name === 'run');
     document.getElementById('panel-reveal').classList.toggle('active', name === 'reveal');
+    document.getElementById('panel-questions').classList.toggle('active', name === 'questions');
     document.body.classList.toggle('reveal-mode', name === 'reveal');
 
     if (name === 'reveal') {
       document.getElementById('tab-reveal').classList.remove('pulse');
       playRevealOnce();
+    }
+    if (name === 'questions') {
+      loadSettings();
+      loadQuestions();
     }
   }
 
@@ -322,4 +327,225 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
   }
+
+  // --- Questions Management ---
+  let bankQuestions = [];
+
+  async function loadSettings() {
+    const res = await fetch(`/api/settings?passcode=${encodeURIComponent(passcode)}`);
+    if (res.ok) {
+      const data = await res.json();
+      document.getElementById('setting-count').value = data.questionCount;
+      document.getElementById('setting-shuffle').checked = data.shuffle;
+    }
+  }
+
+  document.getElementById('btn-save-settings').addEventListener('click', async () => {
+    const count = document.getElementById('setting-count').value;
+    const shuffle = document.getElementById('setting-shuffle').checked;
+    const res = await fetch(`/api/settings?passcode=${encodeURIComponent(passcode)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ questionCount: count, shuffle })
+    });
+    const statusEl = document.getElementById('settings-status');
+    if (res.ok) {
+      statusEl.textContent = 'Settings saved.';
+      setTimeout(() => statusEl.textContent = '', 3000);
+    } else {
+      statusEl.textContent = 'Failed to save.';
+      statusEl.style.color = '#ef4444';
+    }
+  });
+
+  async function loadQuestions() {
+    const res = await fetch(`/api/questions?passcode=${encodeURIComponent(passcode)}`);
+    if (res.ok) {
+      bankQuestions = await res.json();
+      renderQuestions();
+    }
+  }
+
+  function renderQuestions() {
+    const list = document.getElementById('questions-list');
+    list.innerHTML = '';
+    bankQuestions.forEach((q, index) => {
+      const li = document.createElement('li');
+      li.style.cssText = 'background: #26292d; padding: 1rem; border-radius: 4px; display: flex; justify-content: space-between; align-items: flex-start;';
+      
+      const content = document.createElement('div');
+      content.style.flex = '1';
+      let optionsHtml = '';
+      let opts = [];
+      try { opts = typeof q.options === 'string' ? JSON.parse(q.options) : q.options; } catch(e){}
+      opts.forEach((opt, i) => {
+        optionsHtml += `<div style="${i === q.correct_index ? 'color: #10b981; font-weight: 600;' : 'color: #8b93a0;'}">${i === q.correct_index ? '✓ ' : '○ '}${escapeHtml(opt)}</div>`;
+      });
+      
+      content.innerHTML = `
+        <div style="font-weight: 600; margin-bottom: 0.5rem; color: #fff;">${escapeHtml(q.text)}</div>
+        <div style="font-size: 0.9rem;">${optionsHtml}</div>
+      `;
+      
+      const actions = document.createElement('div');
+      actions.style.cssText = 'display: flex; gap: 0.5rem; margin-left: 1rem;';
+      
+      const btnUp = document.createElement('button');
+      btnUp.type = 'button';
+      btnUp.textContent = '↑';
+      btnUp.disabled = index === 0;
+      btnUp.onclick = () => moveQuestion(index, -1);
+      
+      const btnDown = document.createElement('button');
+      btnDown.type = 'button';
+      btnDown.textContent = '↓';
+      btnDown.disabled = index === bankQuestions.length - 1;
+      btnDown.onclick = () => moveQuestion(index, 1);
+      
+      const btnEdit = document.createElement('button');
+      btnEdit.type = 'button';
+      btnEdit.textContent = 'Edit';
+      btnEdit.onclick = () => openQuestionModal(q);
+      
+      const btnDelete = document.createElement('button');
+      btnDelete.type = 'button';
+      btnDelete.textContent = 'Delete';
+      btnDelete.className = 'danger';
+      btnDelete.onclick = () => deleteQuestion(q.id);
+      
+      actions.appendChild(btnUp);
+      actions.appendChild(btnDown);
+      actions.appendChild(btnEdit);
+      actions.appendChild(btnDelete);
+      
+      li.appendChild(content);
+      li.appendChild(actions);
+      list.appendChild(li);
+    });
+  }
+
+  async function moveQuestion(index, dir) {
+    if (index + dir < 0 || index + dir >= bankQuestions.length) return;
+    const a = bankQuestions[index];
+    const b = bankQuestions[index + dir];
+    
+    // Swap order_index
+    const temp = a.order_index;
+    a.order_index = b.order_index;
+    b.order_index = temp;
+    
+    bankQuestions[index] = b;
+    bankQuestions[index + dir] = a;
+    
+    renderQuestions();
+    
+    await fetch(`/api/questions/reorder?passcode=${encodeURIComponent(passcode)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([
+        { id: a.id, order_index: a.order_index },
+        { id: b.id, order_index: b.order_index }
+      ])
+    });
+  }
+
+  async function deleteQuestion(id) {
+    if (!confirm('Are you sure you want to delete this question?')) return;
+    const res = await fetch(`/api/questions/${id}?passcode=${encodeURIComponent(passcode)}`, {
+      method: 'DELETE'
+    });
+    if (res.ok) {
+      bankQuestions = bankQuestions.filter(q => q.id !== id);
+      renderQuestions();
+    }
+  }
+
+  const modal = document.getElementById('question-modal');
+  const qForm = document.getElementById('question-form');
+  const optsContainer = document.getElementById('q-options');
+  
+  function createOptionRow(val = '', isCorrect = false) {
+    const div = document.createElement('div');
+    div.style.cssText = 'display: flex; gap: 0.5rem; align-items: center;';
+    div.innerHTML = `
+      <input type="radio" name="q-correct" required ${isCorrect ? 'checked' : ''}>
+      <input type="text" class="q-opt-val" value="${escapeHtml(val)}" required style="flex: 1; padding: 0.5rem; background: #26292d; border: 1px solid #3c3f43; color: #fff; border-radius: 4px;">
+      <button type="button" class="btn-rm-opt" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">×</button>
+    `;
+    div.querySelector('.btn-rm-opt').onclick = () => {
+      if (optsContainer.children.length > 2) div.remove();
+      else alert('Need at least 2 options.');
+    };
+    optsContainer.appendChild(div);
+  }
+
+  document.getElementById('btn-add-option').addEventListener('click', () => {
+    if (optsContainer.children.length < 6) createOptionRow();
+    else alert('Maximum 6 options allowed.');
+  });
+
+  document.getElementById('btn-new-question').addEventListener('click', () => {
+    openQuestionModal();
+  });
+
+  document.getElementById('btn-cancel-question').addEventListener('click', () => {
+    modal.classList.add('hidden');
+  });
+
+  function openQuestionModal(q = null) {
+    qForm.reset();
+    optsContainer.innerHTML = '';
+    document.getElementById('question-error').textContent = '';
+    
+    if (q) {
+      document.getElementById('question-modal-title').textContent = 'Edit Question';
+      document.getElementById('q-id').value = q.id;
+      document.getElementById('q-text').value = q.text;
+      let opts = [];
+      try { opts = typeof q.options === 'string' ? JSON.parse(q.options) : q.options; } catch(e){}
+      opts.forEach((opt, i) => createOptionRow(opt, i === q.correct_index));
+    } else {
+      document.getElementById('question-modal-title').textContent = 'New Question';
+      document.getElementById('q-id').value = '';
+      createOptionRow('', true);
+      createOptionRow('', false);
+    }
+    
+    modal.classList.remove('hidden');
+  }
+
+  qForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('q-id').value;
+    const text = document.getElementById('q-text').value;
+    
+    const rows = Array.from(optsContainer.children);
+    const options = rows.map(r => r.querySelector('.q-opt-val').value);
+    const correct_index = rows.findIndex(r => r.querySelector('input[type="radio"]').checked);
+    
+    const payload = { text, options: JSON.stringify(options), correct_index };
+    
+    let url = `/api/questions?passcode=${encodeURIComponent(passcode)}`;
+    let method = 'POST';
+    if (id) {
+      url = `/api/questions/${id}?passcode=${encodeURIComponent(passcode)}`;
+      method = 'PUT';
+    } else {
+      payload.order_index = bankQuestions.length > 0 ? Math.max(...bankQuestions.map(q => q.order_index)) + 1 : 0;
+    }
+    
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(await res.text());
+      modal.classList.add('hidden');
+      loadQuestions();
+    } catch(err) {
+      document.getElementById('question-error').textContent = err.message || 'Error saving question.';
+    }
+  });
+
 })();

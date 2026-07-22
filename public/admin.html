@@ -59,6 +59,9 @@
         <button type="button" class="admin-tab" data-tab="reveal" id="tab-reveal">
           2 · Data reveal
         </button>
+        <button type="button" class="admin-tab" data-tab="questions" id="tab-questions">
+          3 · Manage Questions
+        </button>
       </nav>
 
       <!-- RUN QUIZ -->
@@ -186,6 +189,64 @@
           </div>
         </div>
       </div>
+
+      <!-- MANAGE QUESTIONS -->
+      <div class="tab-panel" id="panel-questions">
+        <div class="host-main" style="max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+          <section class="panel">
+            <h2>Quiz Settings</h2>
+            <div style="display: flex; gap: 1rem; align-items: center; margin-top: 1rem;">
+              <label for="setting-count">Number of questions to use:</label>
+              <select id="setting-count" style="padding: 0.5rem; border-radius: 4px;">
+                <option value="all">All Questions</option>
+                <option value="5">First 5</option>
+                <option value="10">First 10</option>
+                <option value="15">First 15</option>
+                <option value="20">First 20</option>
+              </select>
+              <label style="display: flex; gap: 0.5rem; align-items: center; margin-left: 1rem;">
+                <input type="checkbox" id="setting-shuffle"> Shuffle questions
+              </label>
+              <button type="button" class="primary" id="btn-save-settings" style="margin-left: auto;">Save Settings</button>
+            </div>
+            <div id="settings-status" style="color: #10b981; font-size: 0.9rem; margin-top: 0.5rem;"></div>
+          </section>
+
+          <section class="panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h2>Question Bank</h2>
+              <button type="button" class="primary" id="btn-new-question">+ Add Question</button>
+            </div>
+            <ul id="questions-list" style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.5rem;">
+              <!-- Questions populated here -->
+            </ul>
+          </section>
+        </div>
+      </div>
+
+      <!-- Question Editor Modal -->
+      <div class="gate hidden" id="question-modal" style="z-index: 1000; background: rgba(0,0,0,0.8);">
+        <form class="gate-card" id="question-form" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
+          <h2 id="question-modal-title">Edit Question</h2>
+          <input type="hidden" id="q-id">
+          
+          <label style="display: block; margin-top: 1rem; text-align: left;">Question Text</label>
+          <textarea id="q-text" rows="3" required style="width: 100%; padding: 0.5rem; margin-top: 0.5rem; background: #26292d; border: 1px solid #3c3f43; color: #fff; border-radius: 4px; resize: vertical;"></textarea>
+          
+          <label style="display: block; margin-top: 1rem; text-align: left;">Options (Select the correct one)</label>
+          <div id="q-options" style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+            <!-- Option rows added dynamically -->
+          </div>
+          <button type="button" id="btn-add-option" style="margin-top: 0.5rem; align-self: flex-start; padding: 0.3rem 0.6rem; font-size: 0.8rem;">+ Add Option</button>
+          
+          <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2rem;">
+            <button type="button" id="btn-cancel-question" style="background: transparent; border: 1px solid #666; color: #fff;">Cancel</button>
+            <button type="submit" class="primary">Save Question</button>
+          </div>
+          <div class="gate-error" id="question-error"></div>
+        </form>
+      </div>
+
     </div>
 
     <script src="/socket.io/socket.io.js"></script>

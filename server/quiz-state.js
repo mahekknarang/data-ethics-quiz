@@ -12,7 +12,7 @@ function createQuizState(questions) {
     // Auto-paced: ~22s to answer, then 5s feedback + 5s between
     questionDurationMs: 22000,
     feedbackDurationMs: 5000,
-    betweenDurationMs: 5000,
+    betweenDurationMs: 8000,
     players: new Map(), // socketId -> player
     answersThisRound: new Map(), // socketId -> answer payload
     joinOrder: 0,
