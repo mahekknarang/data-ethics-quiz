@@ -83,6 +83,13 @@ const COPY = {
     "okay so, funny story 😅", "this next part hits different 💥", "remember that fine print? 📜👀",
     "time to see what actually happened 🕵️", "brace yourselves 😬", "this is the part nobody expects 🎭",
     "let's talk about what we collected 📊"
+  ],
+  waiting_for_others: [
+    "hanging out while the rest catch up ⏳", "you're early. suspiciously early. 👀",
+    "waiting on the stragglers 🐌", "cooling down, others still cooking 🔥",
+    "done already? show-off 😌", "chilling in the finish zone 🏁",
+    "just vibing till everyone lands 🛬", "patience, the room's still going 🧘",
+    "you win the \"least indecisive\" award 🏆", "hold tight, the rest are still deciding fr 🤔"
   ]
 };
 

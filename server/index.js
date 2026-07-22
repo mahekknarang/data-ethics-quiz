@@ -22,12 +22,18 @@ const {
 } = require('./supabase');
 const { parseUserAgent, getClientIp } = require('./ua-parse');
 const {
+  QUESTION_DURATION_MS,
+  FEEDBACK_DURATION_MS,
+  BETWEEN_DURATION_MS,
   createQuizState,
+  createPlayerState,
   publicQuestion,
   scoreboard,
-  answeredCount,
   playerCount,
-  clearQuizTimers,
+  doneCount,
+  allPlayersDone,
+  clearPlayerTimers,
+  clearAllPlayerTimers,
 } = require('./quiz-state');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -75,25 +81,20 @@ function requirePasscode(req, res, next) {
 }
 
 function hostSnapshot() {
-  const q = state.questions[state.questionIndex];
+  const board = scoreboard(state);
   return {
     phase: state.phase,
     playerCount: playerCount(state),
-    questionIndex: state.questionIndex,
     totalQuestions: state.questions.length,
-    question: q
-      ? { ...publicQuestion(q, state.questionIndex), correct_index: q.correct_index }
-      : null,
-    answered: answeredCount(state),
-    durationMs: state.questionDurationMs,
-    feedbackDurationMs: state.feedbackDurationMs,
-    betweenDurationMs: state.betweenDurationMs,
-    startedAt: state.questionStartedAt,
-    leaderboard: scoreboard(state).slice(0, 10),
+    doneCount: doneCount(state),
+    leaderboard: board.slice(0, 10),
     players: [...state.players.values()].map((p) => ({
       name: p.name,
       score: p.score,
       joinOrder: p.joinOrder,
+      questionIndex: p.questionIndex,
+      playerPhase: p.phase,
+      done: p.done,
     })),
   };
 }
@@ -102,19 +103,20 @@ function playerSnapshot(player) {
   const board = scoreboard(state);
   const me = board.find((r) => r.id === player.id);
   const questionsList = player.shuffledQuestions || state.questions;
-  const q = questionsList[state.questionIndex];
+  const q = player.questionIndex >= 0 ? questionsList[player.questionIndex] : null;
   return {
-    phase: state.phase,
+    phase: player.phase,
+    globalPhase: state.phase,
     playerCount: playerCount(state),
-    questionIndex: state.questionIndex,
+    questionIndex: player.questionIndex,
     totalQuestions: questionsList.length,
-    question: publicQuestion(q, state.questionIndex),
-    durationMs: state.questionDurationMs,
-    startedAt: state.questionStartedAt,
+    question: publicQuestion(q, player.questionIndex),
+    durationMs: QUESTION_DURATION_MS,
+    startedAt: player.questionStartedAt,
     score: player.score,
     correctCount: player.correctCount,
     rank: me?.rank ?? null,
-    answeredThisRound: state.answersThisRound.has(player.socketId),
+    answered: player.answered,
     leaderboard: board.slice(0, 5),
   };
 }
@@ -264,6 +266,159 @@ app.post('/api/questions/reorder', requirePasscode, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ——— Self-Paced Per-Player Quiz Functions ———
+
+/** Start a single player on a specific question index. */
+function startPlayerQuestion(player, index) {
+  clearPlayerTimers(player);
+  const questionsList = player.shuffledQuestions || state.questions;
+
+  player.questionIndex = index;
+  player.phase = 'question';
+  player.answered = false;
+  player.questionStartedAt = Date.now();
+
+  const q = questionsList[index];
+  const payload = {
+    question: publicQuestion(q, index),
+    questionIndex: index,
+    totalQuestions: questionsList.length,
+    durationMs: QUESTION_DURATION_MS,
+    startedAt: player.questionStartedAt,
+  };
+  io.to(player.socketId).emit('quiz:question', payload);
+
+  // Auto-timeout: if player doesn't answer within the duration, force timeout
+  player.timers.question = setTimeout(() => {
+    if (player.phase === 'question' && player.questionIndex === index && !player.answered) {
+      finishPlayerQuestion(player);
+    }
+  }, QUESTION_DURATION_MS);
+
+  io.to('hosts').emit('host:update', hostSnapshot());
+}
+
+/** Handle timeout for a single player (they didn't answer in time). */
+function finishPlayerQuestion(player) {
+  if (player.phase !== 'question') return;
+  clearPlayerTimers(player);
+
+  const questionsList = player.shuffledQuestions || state.questions;
+  const q = questionsList[player.questionIndex];
+
+  player.answered = true;
+  player.phase = 'feedback';
+
+  // Tell the player their time is up
+  io.to(player.socketId).emit('quiz:timeout', {
+    questionIndex: player.questionIndex,
+    correctIndex: q ? q.correct_index : null,
+  });
+
+  // After 5s feedback, advance to between screen
+  player.timers.feedback = setTimeout(() => {
+    if (player.phase === 'feedback') {
+      advancePlayerToBetween(player);
+    }
+  }, FEEDBACK_DURATION_MS);
+
+  io.to('hosts').emit('host:update', hostSnapshot());
+}
+
+/** Transition a single player to the between-questions screen. */
+function advancePlayerToBetween(player) {
+  clearPlayerTimers(player);
+  player.phase = 'between';
+
+  const board = scoreboard(state);
+  const questionsList = player.shuffledQuestions || state.questions;
+
+  io.to(player.socketId).emit('quiz:between', {
+    leaderboard: board.slice(0, 5),
+    questionIndex: player.questionIndex,
+    totalQuestions: questionsList.length,
+    durationMs: BETWEEN_DURATION_MS,
+  });
+
+  // After 5s between, advance to next question (or finish)
+  player.timers.between = setTimeout(() => {
+    if (player.phase === 'between') {
+      advancePlayerToNextQuestion(player);
+    }
+  }, BETWEEN_DURATION_MS);
+
+  io.to('hosts').emit('host:update', hostSnapshot());
+}
+
+/** Move a single player to their next question, or to the waiting/done state. */
+function advancePlayerToNextQuestion(player) {
+  clearPlayerTimers(player);
+  const questionsList = player.shuffledQuestions || state.questions;
+  const next = player.questionIndex + 1;
+
+  if (next >= questionsList.length) {
+    // Player is done with all questions
+    player.done = true;
+    player.phase = 'waiting';
+
+    io.to(player.socketId).emit('quiz:waiting', {
+      score: player.score,
+      rank: scoreboard(state).find((r) => r.id === player.id)?.rank ?? null,
+    });
+
+    io.to('hosts').emit('host:update', hostSnapshot());
+
+    // Check if ALL players are now done
+    if (allPlayersDone(state)) {
+      endQuiz();
+    }
+  } else {
+    startPlayerQuestion(player, next);
+  }
+}
+
+/** Transition a single player to feedback after they answered. */
+function showPlayerFeedback(player, feedbackData) {
+  clearPlayerTimers(player);
+  player.phase = 'feedback';
+
+  io.to(player.socketId).emit('quiz:feedback', feedbackData);
+
+  // After 5s, advance to between screen
+  player.timers.feedback = setTimeout(() => {
+    if (player.phase === 'feedback') {
+      advancePlayerToBetween(player);
+    }
+  }, FEEDBACK_DURATION_MS);
+
+  io.to('hosts').emit('host:update', hostSnapshot());
+}
+
+function endQuiz() {
+  clearAllPlayerTimers(state);
+  state.phase = 'ended';
+  const board = scoreboard(state);
+
+  for (const player of state.players.values()) {
+    player.phase = 'done';
+    player.done = true;
+    const me = board.find((r) => r.id === player.id);
+    io.to(player.socketId).emit('quiz:ended', {
+      score: player.score,
+      rank: me?.rank ?? null,
+      totalPlayers: playerCount(state),
+      leaderboard: board.slice(0, 10),
+    });
+  }
+
+  io.to('hosts').emit('quiz:ended', {
+    leaderboard: board,
+    totalPlayers: playerCount(state),
+  });
+  io.to('hosts').emit('host:update', hostSnapshot());
+  io.emit('dashboard:refresh', {});
+}
+
 // ——— Socket.IO ———
 
 io.on('connection', (socket) => {
@@ -327,7 +482,7 @@ io.on('connection', (socket) => {
 
       const { data: inserted } = await insertPlayer(dbRow);
 
-      const player = {
+      const player = createPlayerState({
         id: inserted?.id || `local-${socket.id}`,
         dbId: inserted?.id || null,
         socketId: socket.id,
@@ -351,7 +506,7 @@ io.on('connection', (socket) => {
         shuffledQuestions: state.questions.length > 0 
           ? (sessionSettings.shuffle ? [...state.questions].sort(() => Math.random() - 0.5) : [...state.questions])
           : [],
-      };
+      });
 
       state.players.set(socket.id, player);
       socket.data.playerId = player.id;
@@ -370,6 +525,11 @@ io.on('connection', (socket) => {
         name: player.name,
         count: playerCount(state),
       });
+
+      // If quiz is already running (late joiner), start them on question 0
+      if (state.phase === 'running') {
+        startPlayerQuestion(player, 0);
+      }
     } catch (err) {
       console.error('player:join', err);
       if (typeof ack === 'function') ack({ ok: false, error: 'Join failed' });
@@ -382,16 +542,16 @@ io.on('connection', (socket) => {
       if (typeof ack === 'function') ack({ ok: false, error: 'Not joined' });
       return;
     }
-    if (state.phase !== 'question') {
+    if (player.phase !== 'question') {
       if (typeof ack === 'function') ack({ ok: false, error: 'No active question' });
       return;
     }
-    if (state.answersThisRound.has(socket.id)) {
+    if (player.answered) {
       if (typeof ack === 'function') ack({ ok: false, error: 'Already answered' });
       return;
     }
 
-    const qIndex = state.questionIndex;
+    const qIndex = player.questionIndex;
     const questionsList = player.shuffledQuestions || state.questions;
     const q = questionsList[qIndex];
     if (!q || Number(payload?.question_id) !== qIndex) {
@@ -408,13 +568,13 @@ io.on('connection', (socket) => {
     const answerTimeMs = Math.max(
       0,
       Math.min(
-        state.questionDurationMs + 2000,
-        Number(payload.answer_time_ms) || Date.now() - (state.questionStartedAt || Date.now())
+        QUESTION_DURATION_MS + 2000,
+        Number(payload.answer_time_ms) || Date.now() - (player.questionStartedAt || Date.now())
       )
     );
     const correct = answerIndex === q.correct_index;
     const speedBonus = correct
-      ? Math.max(0, Math.round((1 - answerTimeMs / state.questionDurationMs) * 400))
+      ? Math.max(0, Math.round((1 - answerTimeMs / QUESTION_DURATION_MS) * 400))
       : 0;
     const points = correct ? 1000 + speedBonus : 0;
 
@@ -426,6 +586,7 @@ io.on('connection', (socket) => {
       player.streak = 0;
     }
     player.answerTimes.push(answerTimeMs);
+    player.answered = true;
 
     const answerPayload = {
       questionId: qIndex,
@@ -436,7 +597,6 @@ io.on('connection', (socket) => {
       streak: player.streak,
     };
     player.answerLog.push(answerPayload);
-    state.answersThisRound.set(socket.id, answerPayload);
 
     await insertAnswer({
       player_id: player.dbId || null,
@@ -458,11 +618,14 @@ io.on('connection', (socket) => {
       });
     }
 
-    io.to('hosts').emit('answer:tally', {
-      answered: answeredCount(state),
-      total: playerCount(state),
+    // Transition this player to feedback (5s) independently
+    showPlayerFeedback(player, {
+      questionIndex: qIndex,
+      correct,
+      points,
+      score: player.score,
+      correctIndex: q.correct_index,
     });
-    io.to('hosts').emit('host:update', hostSnapshot());
   });
 
   socket.on('host:start', async (payload, ack) => {
@@ -496,20 +659,26 @@ io.on('connection', (socket) => {
       console.error('[quiz] host:start error fetching questions', err);
     }
     
-    advanceToQuestion(0);
+    // Set global phase to running
+    state.phase = 'running';
+
+    // Start each player on their first question independently
+    for (const player of state.players.values()) {
+      startPlayerQuestion(player, 0);
+    }
+
     if (typeof ack === 'function') ack({ ok: true });
   });
 
-  // Manual next kept as optional override, but auto-pace is the default
+  // Manual next: host can force-end for all waiting players or skip phases
   socket.on('host:next', (payload, ack) => {
     if (!socket.data.isHost && payload?.passcode !== HOST_PASSCODE) {
       if (typeof ack === 'function') ack({ ok: false, error: 'Unauthorized' });
       return;
     }
-    if (state.phase === 'question') {
-      finishQuestionRound();
-    } else if (state.phase === 'feedback' || state.phase === 'between') {
-      goToNextAfterBetween();
+    // In self-paced mode, host:next forces end if quiz is running
+    if (state.phase === 'running') {
+      endQuiz();
     }
     if (typeof ack === 'function') ack({ ok: true, phase: state.phase });
   });
@@ -529,7 +698,6 @@ io.on('connection', (socket) => {
       if (typeof ack === 'function') ack({ ok: false, error: 'Unauthorized' });
       return;
     }
-    clearQuizTimers(state);
     endQuiz();
     if (typeof ack === 'function') ack({ ok: true });
   });
@@ -539,7 +707,7 @@ io.on('connection', (socket) => {
       if (typeof ack === 'function') ack({ ok: false, error: 'Unauthorized' });
       return;
     }
-    clearQuizTimers(state);
+    clearAllPlayerTimers(state);
     state = createQuizState([]);
     io.emit('quiz:reset', {});
     broadcastCounts();
@@ -554,9 +722,10 @@ io.on('connection', (socket) => {
       ack({
         ok: true,
         snapshot: {
-          phase: state.phase,
+          phase: 'lobby',
+          globalPhase: state.phase,
           playerCount: playerCount(state),
-          questionIndex: state.questionIndex,
+          questionIndex: -1,
           totalQuestions: state.questions.length,
         },
       });
@@ -569,116 +738,21 @@ io.on('connection', (socket) => {
     if (state.phase === 'lobby' && state.players.has(socket.id)) {
       state.players.delete(socket.id);
       broadcastCounts();
+    } else if (state.players.has(socket.id)) {
+      // Clear their timers but keep data
+      const player = state.players.get(socket.id);
+      clearPlayerTimers(player);
+      // Mark disconnected players as done so they don't block others
+      if (!player.done && state.phase === 'running') {
+        player.done = true;
+        player.phase = 'done';
+        if (allPlayersDone(state)) {
+          endQuiz();
+        }
+      }
     }
   });
 });
-
-function advanceToQuestion(index) {
-  clearQuizTimers(state);
-  state.questionIndex = index;
-  state.phase = 'question';
-  state.questionStartedAt = Date.now();
-  state.answersThisRound = new Map();
-
-  io.to('hosts').emit('host:update', hostSnapshot());
-
-  for (const [socketId, player] of state.players.entries()) {
-    const questionsList = player.shuffledQuestions || state.questions;
-    const q = questionsList[index];
-    const payload = {
-      question: publicQuestion(q, index),
-      questionIndex: index,
-      totalQuestions: questionsList.length,
-      durationMs: state.questionDurationMs,
-      feedbackDurationMs: state.feedbackDurationMs,
-      betweenDurationMs: state.betweenDurationMs,
-      startedAt: state.questionStartedAt,
-    };
-    io.to(socketId).emit('quiz:question', payload);
-  }
-
-  // Auto: when time is up → between screen → next question
-  state.timers.question = setTimeout(() => {
-    if (state.phase === 'question' && state.questionIndex === index) {
-      finishQuestionRound();
-    }
-  }, state.questionDurationMs);
-}
-
-function finishQuestionRound() {
-  if (state.phase !== 'question') return;
-  clearQuizTimers(state);
-
-  const q = state.questions[state.questionIndex];
-  state.phase = 'feedback';
-
-  // Page 1: correct / wrong / time-up feedback (~5s)
-  io.to('hosts').emit('host:update', hostSnapshot());
-
-  for (const [socketId, player] of state.players.entries()) {
-    const questionsList = player.shuffledQuestions || state.questions;
-    const q = questionsList[state.questionIndex];
-    io.to(socketId).emit('quiz:timeout', {
-      questionIndex: state.questionIndex,
-      correctIndex: q ? q.correct_index : null,
-      durationMs: state.feedbackDurationMs,
-    });
-  }
-
-  state.timers.feedback = setTimeout(() => {
-    if (state.phase !== 'feedback') return;
-
-    // Page 2: between verses / mini leaderboard (~5s)
-    state.phase = 'between';
-    const board = scoreboard(state);
-    io.emit('quiz:between', {
-      leaderboard: board.slice(0, 5),
-      questionIndex: state.questionIndex,
-      totalQuestions: state.questions.length,
-      durationMs: state.betweenDurationMs,
-    });
-    io.to('hosts').emit('host:update', hostSnapshot());
-
-    state.timers.between = setTimeout(() => {
-      if (state.phase === 'between') {
-        goToNextAfterBetween();
-      }
-    }, state.betweenDurationMs);
-  }, state.feedbackDurationMs);
-}
-
-function goToNextAfterBetween() {
-  clearQuizTimers(state);
-  const next = state.questionIndex + 1;
-  if (next >= state.questions.length) {
-    endQuiz();
-  } else {
-    advanceToQuestion(next);
-  }
-}
-
-function endQuiz() {
-  clearQuizTimers(state);
-  state.phase = 'ended';
-  const board = scoreboard(state);
-
-  for (const player of state.players.values()) {
-    const me = board.find((r) => r.id === player.id);
-    io.to(player.socketId).emit('quiz:ended', {
-      score: player.score,
-      rank: me?.rank ?? null,
-      totalPlayers: playerCount(state),
-      leaderboard: board.slice(0, 10),
-    });
-  }
-
-  io.to('hosts').emit('quiz:ended', {
-    leaderboard: board,
-    totalPlayers: playerCount(state),
-  });
-  io.to('hosts').emit('host:update', hostSnapshot());
-  io.emit('dashboard:refresh', {});
-}
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  Data Ethics Quiz running on ${PUBLIC_URL}`);

@@ -8,6 +8,7 @@
     question: document.getElementById('screen-question'),
     feedback: document.getElementById('screen-feedback'),
     between: document.getElementById('screen-between'),
+    waiting: document.getElementById('screen-waiting'),
     end: document.getElementById('screen-end'),
   };
 
@@ -15,14 +16,12 @@
   let totalQuestions = 10;
   let questionIndex = -1;
   let durationMs = 22000;
-  let betweenDurationMs = 8000;
   let startedAt = null;
   let timerRaf = null;
   let answered = false;
   let score = 0;
   let lowNudgeShown = false;
   let betweenTick = null;
-  let feedbackTimer = null;
 
   const CIRC = 2 * Math.PI * 22;
   const WIN_EMOJIS = ['🎉', '🎊', '✨', '🥳', '👏', '🔥', '💯', '🌟', '🎈', '💖'];
@@ -152,14 +151,6 @@
       rainEmojis(LOSE_EMOJIS, 40);
     }
     showScreen('feedback');
-
-    // Auto-transition to "waiting" state after 2.5s so player isn't frozen
-    if (feedbackTimer) clearTimeout(feedbackTimer);
-    feedbackTimer = setTimeout(() => {
-      if (!screens.feedback.classList.contains('active')) return;
-      document.getElementById('feedback-line').textContent = pickCopy('between_questions');
-      document.getElementById('feedback-score').textContent = 'waiting for others…';
-    }, 2500);
   }
 
   document.getElementById('join-form').addEventListener('submit', (e) => {
@@ -210,13 +201,14 @@
     document.getElementById('lobby-count').textContent = String(count);
   });
 
+  // ——— Self-paced event handlers ———
+
   socket.on('quiz:question', (payload) => {
     answered = false;
     clearBetweenTick();
     questionIndex = payload.questionIndex;
     totalQuestions = payload.totalQuestions;
     durationMs = payload.durationMs || 22000;
-    betweenDurationMs = payload.betweenDurationMs || betweenDurationMs;
     startedAt = payload.startedAt;
     renderDots('dots-q');
     renderDots('dots-fb');
@@ -281,18 +273,32 @@
           );
         }
 
-        setTimeout(() => {
-          showFeedback({ correct: res.correct, timedOut: false, points: res.points });
-        }, 350);
+        // Brief delay to show correct/wrong highlight on buttons, then server
+        // will send quiz:feedback to transition to the feedback screen
       }
     );
   }
 
+  // Server-driven feedback: arrives after player answers (self-paced, 5s server timer)
+  socket.on('quiz:feedback', (payload) => {
+    if (typeof payload.score === 'number') {
+      score = payload.score;
+      document.getElementById('score-pill').textContent = `${score} pts`;
+    }
+    showFeedback({
+      correct: payload.correct,
+      timedOut: false,
+      points: payload.points,
+    });
+  });
+
+  // Server-driven timeout: player didn't answer in time (self-paced)
   socket.on('quiz:timeout', (payload) => {
     if (payload.questionIndex !== questionIndex) return;
     stopTimer();
-    // Already answered → stay on feedback until between arrives (~5s)
+
     if (answered) {
+      // Already answered — server is just confirming timeout, stay on feedback
       if (!screens.feedback.classList.contains('active')) {
         showScreen('feedback');
       }
@@ -309,13 +315,14 @@
     showFeedback({ correct: false, timedOut: true });
   });
 
+  // Per-player between-questions screen (5s countdown, server-driven)
   socket.on('quiz:between', (payload) => {
     clearBetweenTick();
     document.getElementById('between-title').textContent = pickCopy('between_questions');
     document.getElementById('lb-title').textContent = pickCopy('leaderboard');
     formatLb(payload.leaderboard, 'between-lb');
 
-    const dwell = payload.durationMs || betweenDurationMs;
+    const dwell = payload.durationMs || 5000;
     const endsAt = Date.now() + dwell;
     const timerEl = document.getElementById('between-timer');
     const tick = () => {
@@ -326,6 +333,18 @@
     betweenTick = setInterval(tick, 250);
 
     showScreen('between');
+  });
+
+  // Player finished all questions — waiting for others
+  socket.on('quiz:waiting', (payload) => {
+    stopTimer();
+    clearBetweenTick();
+    document.getElementById('waiting-line').textContent = pickCopy('waiting_for_others');
+    if (typeof payload.score === 'number') {
+      score = payload.score;
+    }
+    document.getElementById('waiting-sub').textContent = `${score} pts · rank #${payload.rank || '?'}`;
+    showScreen('waiting');
   });
 
   socket.on('quiz:leaderboard', (payload) => {

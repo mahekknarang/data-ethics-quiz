@@ -98,11 +98,11 @@
     document.getElementById('host-title').textContent =
       phase === 'lobby'
         ? 'Lobby'
-        : phase === 'question'
-          ? 'Live question'
-          : phase === 'between'
-            ? 'Between rounds'
-            : 'Final results';
+        : phase === 'running'
+          ? 'Quiz in progress (self-paced)'
+          : phase === 'ended'
+            ? 'Final results'
+            : phase.charAt(0).toUpperCase() + phase.slice(1);
 
     document.getElementById('btn-start').disabled = phase !== 'lobby';
     document.getElementById('btn-next').disabled = phase === 'lobby' || phase === 'ended';
@@ -112,30 +112,32 @@
       document.getElementById('dash-link').classList.remove('hidden');
     }
 
-    if (snap.questionIndex >= 0) {
-      document.getElementById('stat-q').textContent =
-        `${snap.questionIndex + 1}/${snap.totalQuestions}`;
-    } else {
-      document.getElementById('stat-q').textContent = '—';
-    }
+    // Show how many players are done vs total
+    const done = snap.doneCount || 0;
+    document.getElementById('stat-q').textContent =
+      phase === 'running'
+        ? `${done}/${snap.playerCount} done`
+        : phase === 'ended'
+          ? `${snap.totalQuestions} Q\'s`
+          : '—';
 
     document.getElementById('stat-answered').textContent =
-      `${snap.answered}/${snap.playerCount}`;
-    animateTally(snap.answered);
+      `${done}/${snap.playerCount}`;
+    animateTally(done);
     document.getElementById('tally-total').textContent = String(snap.playerCount);
 
     const stageQ = document.getElementById('stage-q');
     const opts = document.getElementById('options-preview');
     opts.innerHTML = '';
 
-    if (snap.question) {
-      stageQ.textContent = snap.question.text;
-      (snap.question.options || []).forEach((o, i) => {
+    if (phase === 'running') {
+      stageQ.textContent = `Self-paced: ${done} of ${snap.playerCount} players finished`;
+      // Show per-player progress
+      (snap.players || []).forEach((p) => {
         const d = document.createElement('div');
-        d.textContent = o;
-        if (typeof snap.question.correct === 'number' && i === snap.question.correct) {
-          d.classList.add('correct');
-        }
+        const qNum = p.questionIndex >= 0 ? p.questionIndex + 1 : 0;
+        d.textContent = `${p.name}: Q${qNum}/${snap.totalQuestions} (${p.playerPhase})`;
+        if (p.done) d.style.opacity = '0.5';
         opts.appendChild(d);
       });
     } else if (phase === 'ended') {
