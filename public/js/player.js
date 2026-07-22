@@ -22,6 +22,7 @@
   let score = 0;
   let lowNudgeShown = false;
   let betweenTick = null;
+  let feedbackTimer = null;
 
   const CIRC = 2 * Math.PI * 22;
   const WIN_EMOJIS = ['🎉', '🎊', '✨', '🥳', '👏', '🔥', '💯', '🌟', '🎈', '💖'];
@@ -151,6 +152,14 @@
       rainEmojis(LOSE_EMOJIS, 40);
     }
     showScreen('feedback');
+
+    // Auto-transition to "waiting" state after 2.5s so player isn't frozen
+    if (feedbackTimer) clearTimeout(feedbackTimer);
+    feedbackTimer = setTimeout(() => {
+      if (!screens.feedback.classList.contains('active')) return;
+      document.getElementById('feedback-line').textContent = pickCopy('between_questions');
+      document.getElementById('feedback-score').textContent = 'waiting for others…';
+    }, 2500);
   }
 
   document.getElementById('join-form').addEventListener('submit', (e) => {
